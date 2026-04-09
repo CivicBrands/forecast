@@ -1,3 +1,8 @@
+> The system maintains parallel interpretation paths derived from shared observations.  
+> These paths are updated iteratively and may diverge or converge over time, rather than being reduced to a single resolved state prematurely.  
+> 
+> Authoritative outputs and directives are produced as a time-bound coalescence of these paths, weighted according to their state at that point, and shall be acted upon within that context.
+
 # Ethics & Use Boundaries
 
 This system ingests and represents real-world conditions across multiple sources.  
