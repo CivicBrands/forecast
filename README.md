@@ -110,7 +110,7 @@ Phase  4  [done]   Multi-source ingestion (METAR + AirNow, parallel)
 Phase  5  [ ]      Cadence model (per-source intervals via setInterval)
 Phase  6  [ ]      Collation (snapshot of STORE at fixed intervals)
 Phase  7  [ ]      Output surface (HTTP endpoint serving snapshots)
-Phase  8  [ ]      Domain + edge (forecast.bjl13.org via Cloudflare)
+Phase  8  [ ]      Domain + edge (forecast.civicbrands.org via Cloudflare)
 Phase  9  [ ]      Persistence (append snapshots to disk or DB)
 Phase 10  [ ]      Latent variable layer (cross-source derived signals)
 ```
