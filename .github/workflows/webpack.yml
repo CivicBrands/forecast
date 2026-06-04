@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: CivicBrands/actions-checkout
+      - uses: CivicBrands/actions-checkout@latest
 
       - uses: actions/setup-node@v4
         with:
