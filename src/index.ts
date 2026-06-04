@@ -12,6 +12,9 @@ if (!AIRNOW_API_KEY) {
   throw new Error("AIRNOW_API_KEY not set in .env");
 }
 
+const TICK_MS = Number(process.env.TICK_MS ?? 5 * 60 * 1000);
+const RUN_ONCE = process.env.RUN_ONCE === "1";
+
 // --- STORE ---
 
 type SourceKey = "METAR" | "AIRNOW";
@@ -55,30 +58,38 @@ function storeAirNow(observations: AirNowObservation[]) {
   };
 }
 
+// --- Tick ---
+
+async function tick() {
+  const started = new Date().toISOString();
+  console.log(`[${started}] tick`);
+
+  const results = await Promise.allSettled([
+    ingestMetar(USER_LAT, USER_LON, RADIUS_MILES).then(storeMetar),
+    ingestAirNow(USER_LAT, USER_LON, RADIUS_MILES, AIRNOW_API_KEY).then(storeAirNow),
+  ]);
+
+  const sources: SourceKey[] = ["METAR", "AIRNOW"];
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      console.error(`  ${sources[i]} failed:`, r.reason instanceof Error ? r.reason.message : r.reason);
+    } else {
+      const entry = STORE[sources[i]];
+      console.log(`  ${sources[i]}: ${entry?.data.length ?? 0} records`);
+    }
+  });
+}
+
 // --- Run ---
 
 async function main() {
-  const [metarObs, airNowObs] = await Promise.all([
-    ingestMetar(USER_LAT, USER_LON, RADIUS_MILES),
-    ingestAirNow(USER_LAT, USER_LON, RADIUS_MILES, AIRNOW_API_KEY),
-  ]);
+  await tick();
+  if (RUN_ONCE) return;
 
-  storeMetar(metarObs);
-  storeAirNow(airNowObs);
-
-  // --- Summary ---
-  console.log(`METAR: ${metarObs.length} stations`);
-  for (const obs of metarObs) {
-    console.log(`  ${obs.icaoId} (${obs.name}) — ${obs.temp}°C, wind ${obs.wdir}°/${obs.wspd}kt, ${obs.fltCat}`);
-  }
-
-  console.log(`\nAIRNOW: ${airNowObs.length} observations`);
-  for (const obs of airNowObs) {
-    console.log(`  ${obs.ReportingArea}, ${obs.StateCode} — ${obs.ParameterName}: AQI ${obs.AQI} (${obs.Category.Name})`);
-  }
-
-  console.log("\nSTORE:");
-  console.log(JSON.stringify(STORE, null, 2));
+  console.log(`scheduling next tick every ${TICK_MS}ms`);
+  setInterval(() => {
+    tick().catch((err) => console.error("tick error:", err));
+  }, TICK_MS);
 }
 
 main().catch((err) => {
