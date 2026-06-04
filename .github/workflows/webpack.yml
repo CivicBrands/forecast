@@ -20,8 +20,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate ingestion + schema
-        run: npm run dev
+      - name: Type-check
+        run: npx tsc --noEmit
 
       - name: Build
         run: npm run build
