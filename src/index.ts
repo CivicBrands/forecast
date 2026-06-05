@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { ingestMetar, MetarObservation, ingestAirNow, AirNowObservation } from "./ingest";
+import { appendSnapshot, latestSnapshot, SourceKey } from "./store";
 
 // --- Config ---
 
@@ -15,47 +16,33 @@ if (!AIRNOW_API_KEY) {
 const TICK_MS = Number(process.env.TICK_MS ?? 5 * 60 * 1000);
 const RUN_ONCE = process.env.RUN_ONCE === "1";
 
-// --- STORE ---
+// --- Persist ---
 
-type SourceKey = "METAR" | "AIRNOW";
-
-type StoreEntry<T> = {
-  source: SourceKey;
-  fetched_at: number;
-  observed_at_min: number;
-  observed_at_max: number;
-  data: T[];
-};
-
-const STORE: Partial<Record<SourceKey, StoreEntry<unknown>>> = {};
-
-function storeMetar(observations: MetarObservation[]) {
+function persistMetar(observations: MetarObservation[]) {
   const obsTimes = observations.map((o) => o.obsTime);
-
-  STORE.METAR = {
+  appendSnapshot({
     source: "METAR",
     fetched_at: Date.now(),
     observed_at_min: Math.min(...obsTimes),
     observed_at_max: Math.max(...obsTimes),
     data: observations,
-  };
+  });
 }
 
-function storeAirNow(observations: AirNowObservation[]) {
+function persistAirNow(observations: AirNowObservation[]) {
   // AirNow gives DateObserved + HourObserved, not epoch — derive epoch
   const toEpoch = (o: AirNowObservation) => {
     const d = new Date(`${o.DateObserved}T${String(o.HourObserved).padStart(2, "0")}:00:00`);
     return Math.floor(d.getTime() / 1000);
   };
   const obsTimes = observations.map(toEpoch);
-
-  STORE.AIRNOW = {
+  appendSnapshot({
     source: "AIRNOW",
     fetched_at: Date.now(),
     observed_at_min: Math.min(...obsTimes),
     observed_at_max: Math.max(...obsTimes),
     data: observations,
-  };
+  });
 }
 
 // --- Tick ---
@@ -65,8 +52,8 @@ async function tick() {
   console.log(`[${started}] tick`);
 
   const results = await Promise.allSettled([
-    ingestMetar(USER_LAT, USER_LON, RADIUS_MILES).then(storeMetar),
-    ingestAirNow(USER_LAT, USER_LON, RADIUS_MILES, AIRNOW_API_KEY).then(storeAirNow),
+    ingestMetar(USER_LAT, USER_LON, RADIUS_MILES).then(persistMetar),
+    ingestAirNow(USER_LAT, USER_LON, RADIUS_MILES, AIRNOW_API_KEY).then(persistAirNow),
   ]);
 
   const sources: SourceKey[] = ["METAR", "AIRNOW"];
@@ -74,8 +61,8 @@ async function tick() {
     if (r.status === "rejected") {
       console.error(`  ${sources[i]} failed:`, r.reason instanceof Error ? r.reason.message : r.reason);
     } else {
-      const entry = STORE[sources[i]];
-      console.log(`  ${sources[i]}: ${entry?.data.length ?? 0} records`);
+      const entry = latestSnapshot(sources[i]);
+      console.log(`  ${sources[i]}: ${entry?.data.length ?? 0} records persisted`);
     }
   });
 }
