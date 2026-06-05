@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { config } from "./config";
 
 export type SourceKey = "METAR" | "AIRNOW";
 
@@ -21,11 +22,9 @@ export type Collation = {
   sources: Partial<Record<SourceKey, { snapshot_id: number; fetched_at: number; record_count: number }>>;
 };
 
-const DB_PATH = process.env.DB_PATH ?? "./data/forecast.db";
+mkdirSync(dirname(config.dbPath), { recursive: true });
 
-mkdirSync(dirname(DB_PATH), { recursive: true });
-
-const db = new Database(DB_PATH);
+const db = new Database(config.dbPath);
 db.pragma("journal_mode = WAL");
 
 db.exec(`
