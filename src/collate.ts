@@ -1,8 +1,7 @@
 import { appendCollation, Collation, latestSnapshot, SourceKey } from "./store";
+import { config } from "./config";
 
 const ALL_SOURCES: SourceKey[] = ["METAR", "AIRNOW"];
-
-const MAX_AGE_MS = Number(process.env.COLLATION_MAX_AGE_MS ?? 60 * 60 * 1000);
 
 export function collate(now: number = Date.now()): Collation | null {
   const sources: Collation["sources"] = {};
@@ -12,7 +11,7 @@ export function collate(now: number = Date.now()): Collation | null {
   for (const src of ALL_SOURCES) {
     const snap = latestSnapshot(src);
     if (!snap || snap.id === undefined) continue;
-    if (now - snap.fetched_at > MAX_AGE_MS) continue;
+    if (now - snap.fetched_at > config.collationMaxAgeMs) continue;
 
     sources[src] = {
       snapshot_id: snap.id,

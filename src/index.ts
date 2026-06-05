@@ -3,24 +3,11 @@ import { ingestMetar, MetarObservation, ingestAirNow, AirNowObservation } from "
 import { appendSnapshot, latestSnapshot, SourceKey } from "./store";
 import { collate } from "./collate";
 import { startServer } from "./server";
+import { config } from "./config";
 
-// --- Config ---
-
-const USER_LAT = 39.0997;
-const USER_LON = -94.5786;
-const RADIUS_MILES = 30;
-
-const AIRNOW_API_KEY = process.env.AIRNOW_API_KEY ?? "";
-if (!AIRNOW_API_KEY) {
+if (!config.airnowApiKey) {
   throw new Error("AIRNOW_API_KEY not set in .env");
 }
-
-const TICK_MS = Number(process.env.TICK_MS ?? 5 * 60 * 1000);
-const RUN_ONCE = process.env.RUN_ONCE === "1";
-const PORT = Number(process.env.PORT ?? 3000);
-const SERVE = process.env.SERVE !== "0";
-
-// --- Persist ---
 
 function persistMetar(observations: MetarObservation[]) {
   const obsTimes = observations.map((o) => o.obsTime);
@@ -34,7 +21,6 @@ function persistMetar(observations: MetarObservation[]) {
 }
 
 function persistAirNow(observations: AirNowObservation[]) {
-  // AirNow gives DateObserved + HourObserved, not epoch — derive epoch
   const toEpoch = (o: AirNowObservation) => {
     const d = new Date(`${o.DateObserved}T${String(o.HourObserved).padStart(2, "0")}:00:00`);
     return Math.floor(d.getTime() / 1000);
@@ -49,15 +35,14 @@ function persistAirNow(observations: AirNowObservation[]) {
   });
 }
 
-// --- Tick ---
-
 async function tick() {
   const started = new Date().toISOString();
   console.log(`[${started}] tick`);
 
+  const { lat, lon, radiusMiles } = config.user;
   const results = await Promise.allSettled([
-    ingestMetar(USER_LAT, USER_LON, RADIUS_MILES).then(persistMetar),
-    ingestAirNow(USER_LAT, USER_LON, RADIUS_MILES, AIRNOW_API_KEY).then(persistAirNow),
+    ingestMetar(lat, lon, radiusMiles).then(persistMetar),
+    ingestAirNow(lat, lon, radiusMiles, config.airnowApiKey).then(persistAirNow),
   ]);
 
   const sources: SourceKey[] = ["METAR", "AIRNOW"];
@@ -79,18 +64,16 @@ async function tick() {
   }
 }
 
-// --- Run ---
-
 async function main() {
   await tick();
-  if (RUN_ONCE) return;
+  if (config.runOnce) return;
 
-  if (SERVE) startServer(PORT);
+  if (config.serve) startServer(config.port);
 
-  console.log(`scheduling next tick every ${TICK_MS}ms`);
+  console.log(`scheduling next tick every ${config.tickMs}ms`);
   setInterval(() => {
     tick().catch((err) => console.error("tick error:", err));
-  }, TICK_MS);
+  }, config.tickMs);
 }
 
 main().catch((err) => {
