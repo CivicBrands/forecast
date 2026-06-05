@@ -2,6 +2,7 @@ import "dotenv/config";
 import { ingestMetar, MetarObservation, ingestAirNow, AirNowObservation } from "./ingest";
 import { appendSnapshot, latestSnapshot, SourceKey } from "./store";
 import { collate } from "./collate";
+import { startServer } from "./server";
 
 // --- Config ---
 
@@ -16,6 +17,8 @@ if (!AIRNOW_API_KEY) {
 
 const TICK_MS = Number(process.env.TICK_MS ?? 5 * 60 * 1000);
 const RUN_ONCE = process.env.RUN_ONCE === "1";
+const PORT = Number(process.env.PORT ?? 3000);
+const SERVE = process.env.SERVE !== "0";
 
 // --- Persist ---
 
@@ -81,6 +84,8 @@ async function tick() {
 async function main() {
   await tick();
   if (RUN_ONCE) return;
+
+  if (SERVE) startServer(PORT);
 
   console.log(`scheduling next tick every ${TICK_MS}ms`);
   setInterval(() => {
