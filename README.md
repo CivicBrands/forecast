@@ -33,11 +33,11 @@ An ingestion and validation engine that pulls heterogeneous real-world data stre
      |
 [Observation Arrays]
      |
-[STORE] (per-source, time-bounded)
+[STORE] (D1, per-source append-only)
      |
-[Collation] (not yet implemented)
+[Collation] (cross-source snapshot index)
      |
-[Output / API] (not yet implemented)
+[Output / API] (Cloudflare Worker — https://forecast.civicbrands.org)
 ```
 
 ## Design Principles
