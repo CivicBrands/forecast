@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { ingestMetar, MetarObservation, ingestAirNow, AirNowObservation } from "./ingest";
 import { appendSnapshot, latestSnapshot, SourceKey } from "./store";
+import { collate } from "./collate";
 
 // --- Config ---
 
@@ -65,6 +66,14 @@ async function tick() {
       console.log(`  ${sources[i]}: ${entry?.data.length ?? 0} records persisted`);
     }
   });
+
+  const c = collate();
+  if (c) {
+    const srcList = Object.keys(c.sources).join(", ");
+    console.log(`  COLLATED #${c.id}: [${srcList}] window ${c.observed_at_min}–${c.observed_at_max}`);
+  } else {
+    console.log(`  COLLATED: no fresh sources`);
+  }
 }
 
 // --- Run ---
