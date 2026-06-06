@@ -22,3 +22,19 @@ COLLATION_MAX_AGE_MS = "3600000"
 [[routes]]
 pattern = "forecast.civicbrands.org/*"
 zone_name = "civicbrands.org"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = false
+persist = true
+head_sampling_rate = 1
+
