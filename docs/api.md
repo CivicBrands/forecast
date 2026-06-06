@@ -146,3 +146,21 @@ Returns the most recent `N` (default `100`) rows for the named latent, ordered b
 **`200`** — JSON array, same row shape as `/latents/latest`.
 
 **`400`** — `{ "error": "name_required" }` if `name` is not provided.
+
+---
+
+## `POST /ingest/notam`
+
+Receives a batch of canonical NOTAM records from the SWIM relay (`relay/notam/`). This endpoint is internal and **MUST** be called only by the relay; it is **NOT** part of the public read surface.
+
+- **Authentication**: `Authorization: Bearer ${INGEST_TOKEN}`. `INGEST_TOKEN` is provisioned as a Worker secret and **MUST** match the value held by the relay.
+- **Content-Type**: `application/json`
+- **Body**: `{ "records": NotamRecord[] }` — see `src/notam-schema.ts` for the field-level schema.
+
+**`200`** — `{ "accepted": <count> }`. One row is appended to `snapshots` with `source = "NOTAM"` and `data` equal to the submitted batch.
+
+**`400`** — `{ "error": "invalid_json" }` or `{ "error": "invalid_payload", "details": <zod-error> }`.
+
+**`401`** — `{ "error": "unauthorized" }` when the bearer token is missing or wrong.
+
+**`503`** — `{ "error": "ingest_disabled" }` when no `INGEST_TOKEN` is configured on the Worker.

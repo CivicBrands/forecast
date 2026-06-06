@@ -1,8 +1,10 @@
 import { appendLatent, appendSnapshot, latentsByName, latestCollation, latestLatents, latestSnapshot, Snapshot } from "./store";
 import { collate } from "./collate";
-import { findSource, registry, sourceNames } from "../sources/registry";
+import { knownSourceNames, registry, sourceNames } from "../sources/registry";
 import { AnySource, SourceContext } from "../sources/types";
 import { deriveLatents } from "../latents";
+import { NOTAM_SOURCE_NAME } from "../sources/registry";
+import { NotamIngestRequestSchema, epochSeconds as notamEpoch } from "../notam-schema";
 
 export interface Env {
   DB: D1Database;
@@ -16,8 +18,8 @@ export interface Env {
   NEXRAD_STATIONS?: string;
   NLDN_TOKEN?: string;
   NLDN_ENDPOINT?: string;
-  FAA_CLIENT_ID?: string;
-  FAA_CLIENT_SECRET?: string;
+  /** Bearer token presented by the NOTAM SWIM relay on POST /ingest/notam. */
+  INGEST_TOKEN?: string;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -86,9 +88,44 @@ export async function runTick(env: Env): Promise<void> {
   }
 }
 
+async function handleNotamIngest(req: Request, env: Env): Promise<Response> {
+  if (!env.INGEST_TOKEN) return json({ error: "ingest_disabled" }, 503);
+  const auth = req.headers.get("authorization") ?? "";
+  if (auth !== `Bearer ${env.INGEST_TOKEN}`) return json({ error: "unauthorized" }, 401);
+
+  let payload: unknown;
+  try {
+    payload = await req.json();
+  } catch {
+    return json({ error: "invalid_json" }, 400);
+  }
+  const parsed = NotamIngestRequestSchema.safeParse(payload);
+  if (!parsed.success) return json({ error: "invalid_payload", details: parsed.error.format() }, 400);
+  const records = parsed.data.records;
+  if (records.length === 0) return json({ accepted: 0 });
+
+  const issuedTimes = records.map((r) => notamEpoch(r.issued)).filter((t) => t > 0);
+  const now = Date.now();
+  const observedMin = issuedTimes.length > 0 ? Math.min(...issuedTimes) : Math.floor(now / 1000);
+  const observedMax = issuedTimes.length > 0 ? Math.max(...issuedTimes) : Math.floor(now / 1000);
+
+  await appendSnapshot(env.DB, {
+    source: NOTAM_SOURCE_NAME,
+    fetched_at: now,
+    observed_at_min: observedMin,
+    observed_at_max: observedMax,
+    data: records,
+  });
+  return json({ accepted: records.length });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
+
+    if (req.method === "POST" && url.pathname === "/ingest/notam") {
+      return handleNotamIngest(req, env);
+    }
 
     if (req.method !== "GET") return json({ error: "method_not_allowed" }, 405);
 
@@ -114,13 +151,13 @@ export default {
     const m = url.pathname.match(/^\/snapshots\/([A-Z0-9_]+)$/);
     if (m) {
       const source = m[1];
-      if (!findSource(source)) return json({ error: "unknown_source" }, 404);
+      if (!knownSourceNames().includes(source)) return json({ error: "unknown_source" }, 404);
       const snap = await latestSnapshot(env.DB, source);
       return snap ? json(snap) : json({ error: "no_snapshot" }, 404);
     }
 
     if (url.pathname === "/") {
-      const snapshotRoutes = sourceNames().map((s) => `/snapshots/${s}`);
+      const snapshotRoutes = knownSourceNames().map((s) => `/snapshots/${s}`);
       return json({
         endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
       });

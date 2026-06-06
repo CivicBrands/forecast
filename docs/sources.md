@@ -107,11 +107,13 @@ Lightning detections from the National Lightning Detection Network. Subscription
 - **Cadence**: 5 minutes
 - **Enabled when**: both `NLDN_TOKEN` and `NLDN_ENDPOINT` are set
 
-### NOTAM — `src/sources/notam.ts`
+### NOTAM — `relay/notam/` (push)
 
-Airspace notices from the FAA NOTAM API.
+Airspace notices from the FAA via **SWIM JMS**, not REST. The Worker cannot open the outbound TLS connection (`tcps://ems1.swim.faa.gov:55443`) that the Solace broker requires, so NOTAM ingestion runs out-of-process in `relay/notam/` — a Node systemd unit on a home server.
 
-- **Endpoint**: `https://external-api.faa.gov/notamapi/v1/notams`
-- **Authentication**: `client_id` / `client_secret` headers
-- **Cadence**: 15 minutes
-- **Enabled when**: both `FAA_CLIENT_ID` and `FAA_CLIENT_SECRET` are set
+- **Upstream**: FAA SWIM, message VPN `AIM_FNS`, AIXM 5.1 Basic Messages with FNS Event extensions
+- **Authentication (upstream)**: Solace username + password + queue, provisioned through the SWIM portal
+- **Authentication (downstream)**: relay POSTs to the Worker at `/ingest/notam` with bearer `INGEST_TOKEN`
+- **Schema**: canonical `NotamRecord` declared in `src/notam-schema.ts`; the AIXM XML is **NOT** preserved
+- **Filtering**: relay drops records outside `USER_LAT/LON + RADIUS_MILES` before forwarding (set `GEO_FILTER=0` to forward the national firehose)
+- **Cadence**: continuous — no polling; messages arrive as the FAA publishes them
