@@ -28,6 +28,21 @@ test("GET /healthz returns ok", async () => {
   assert.deepEqual(await r.json(), { ok: true });
 });
 
+test("GET / returns endpoint JSON for API clients", async () => {
+  const r = await fetch(`${base}/`, { headers: { Accept: "application/json" } });
+  assert.equal(r.status, 200);
+  const body = (await r.json()) as { endpoints: string[] };
+  assert.ok(body.endpoints.includes("/healthz"));
+  assert.ok(body.endpoints.includes("/collations/latest"));
+});
+
+test("GET / returns dashboard HTML for browsers", async () => {
+  const r = await fetch(`${base}/`, { headers: { Accept: "text/html" } });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type") ?? "", /text\/html/);
+  assert.match(await r.text(), /Observational Field/);
+});
+
 test("GET /snapshots/UNKNOWN returns 404", async () => {
   const r = await fetch(`${base}/snapshots/BOGUS`);
   assert.equal(r.status, 404);

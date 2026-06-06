@@ -1,10 +1,28 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { latentsByName, latestCollation, latestLatents, latestSnapshot } from "./store";
 import { knownSourceNames } from "./sources/registry";
+import { renderFrontendHtml } from "./frontend";
 
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(body));
+}
+
+function html(res: ServerResponse, body: string) {
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(body);
+}
+
+function wantsHtml(req: IncomingMessage): boolean {
+  const accept = String(req.headers.accept ?? "");
+  return accept.includes("text/html") && !accept.includes("application/json");
+}
+
+function endpointIndex() {
+  const snapshotRoutes = knownSourceNames().map((s) => `/snapshots/${s}`);
+  return {
+    endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
+  };
 }
 
 function handle(req: IncomingMessage, res: ServerResponse) {
@@ -40,10 +58,7 @@ function handle(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (url.pathname === "/") {
-    const snapshotRoutes = knownSourceNames().map((s) => `/snapshots/${s}`);
-    return json(res, 200, {
-      endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
-    });
+    return wantsHtml(req) ? html(res, renderFrontendHtml()) : json(res, 200, endpointIndex());
   }
 
   json(res, 404, { error: "not_found" });

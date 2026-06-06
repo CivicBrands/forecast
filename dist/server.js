@@ -4,9 +4,24 @@ exports.startServer = startServer;
 const node_http_1 = require("node:http");
 const store_1 = require("./store");
 const registry_1 = require("./sources/registry");
+const frontend_1 = require("./frontend");
 function json(res, status, body) {
     res.writeHead(status, { "Content-Type": "application/json" });
     res.end(JSON.stringify(body));
+}
+function html(res, body) {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(body);
+}
+function wantsHtml(req) {
+    const accept = String(req.headers.accept ?? "");
+    return accept.includes("text/html") && !accept.includes("application/json");
+}
+function endpointIndex() {
+    const snapshotRoutes = (0, registry_1.knownSourceNames)().map((s) => `/snapshots/${s}`);
+    return {
+        endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
+    };
 }
 function handle(req, res) {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -38,10 +53,7 @@ function handle(req, res) {
         return snap ? json(res, 200, snap) : json(res, 404, { error: "no_snapshot" });
     }
     if (url.pathname === "/") {
-        const snapshotRoutes = (0, registry_1.knownSourceNames)().map((s) => `/snapshots/${s}`);
-        return json(res, 200, {
-            endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
-        });
+        return wantsHtml(req) ? html(res, (0, frontend_1.renderFrontendHtml)()) : json(res, 200, endpointIndex());
     }
     json(res, 404, { error: "not_found" });
 }

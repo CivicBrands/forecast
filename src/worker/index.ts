@@ -5,6 +5,7 @@ import { AnySource, SourceContext } from "../sources/types";
 import { deriveLatents } from "../latents";
 import { NOTAM_SOURCE_NAME } from "../sources/registry";
 import { NotamIngestRequestSchema, epochSeconds as notamEpoch } from "../notam-schema";
+import { renderFrontendHtml } from "../frontend";
 
 export interface Env {
   DB: D1Database;
@@ -27,6 +28,24 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function html(body: string): Response {
+  return new Response(body, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+function wantsHtml(req: Request): boolean {
+  const accept = req.headers.get("accept") ?? "";
+  return accept.includes("text/html") && !accept.includes("application/json");
+}
+
+function endpointIndex() {
+  const snapshotRoutes = knownSourceNames().map((s) => `/snapshots/${s}`);
+  return {
+    endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
+  };
 }
 
 function buildContext(env: Env): SourceContext {
@@ -157,10 +176,7 @@ export default {
     }
 
     if (url.pathname === "/") {
-      const snapshotRoutes = knownSourceNames().map((s) => `/snapshots/${s}`);
-      return json({
-        endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
-      });
+      return wantsHtml(req) ? html(renderFrontendHtml()) : json(endpointIndex());
     }
 
     return json({ error: "not_found" }, 404);

@@ -3,33 +3,173 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>forecast — civicbrands</title>
+  <title>forecast - civicbrands</title>
   <link rel="canonical" href="https://forecast.civicbrands.org/" />
   <meta name="description" content="Time-resolved, multi-source observational field generator." />
   <style>
-    :root { color-scheme: light dark; }
-    html, body { margin: 0; padding: 0; background: #0b0c0e; color: #e6e6e6; font: 16px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    main { max-width: 42rem; margin: 0 auto; padding: 4rem 1.5rem; }
-    h1 { font-size: 1.4rem; margin: 0 0 0.25rem; letter-spacing: 0.02em; }
-    .sub { color: #8a8f98; margin-bottom: 2rem; }
-    p { margin: 0 0 1rem; }
-    a { color: #7cc4ff; text-decoration: none; border-bottom: 1px dotted #7cc4ff66; }
-    a:hover { border-bottom-style: solid; }
-    .meta { margin-top: 2.5rem; color: #6b7079; font-size: 0.85rem; }
-    code { background: #16181c; padding: 0.1rem 0.35rem; border-radius: 3px; }
+    :root {
+      color-scheme: dark;
+      --bg: #101113;
+      --panel: #17191c;
+      --panel-2: #1d2024;
+      --ink: #f1f3f4;
+      --muted: #9da5ae;
+      --line: #343941;
+      --accent: #89c2d9;
+      --ok: #82c68c;
+      --bad: #df7b75;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+    body { font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { min-height: 100vh; display: grid; grid-template-columns: 17rem minmax(0, 1fr); }
+    aside { border-right: 1px solid var(--line); background: #0d0e10; padding: 1rem; min-width: 0; }
+    h1, h2, h3 { margin: 0; letter-spacing: 0; }
+    h1 { font-size: 1.15rem; }
+    h2 { font-size: 1.25rem; }
+    h3 { font-size: 0.95rem; }
+    nav { display: grid; gap: 0.35rem; margin-top: 1.5rem; }
+    nav a { color: var(--muted); text-decoration: none; padding: 0.45rem 0.5rem; border-radius: 6px; }
+    nav a:hover { color: var(--ink); background: var(--panel); }
+    button { border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); height: 2.25rem; padding: 0 0.75rem; border-radius: 6px; cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    .content { padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .muted { color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1rem; }
+    section { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; min-width: 0; }
+    .span-3 { grid-column: span 3; }
+    .span-5 { grid-column: span 5; }
+    .span-7 { grid-column: span 7; }
+    .span-12 { grid-column: span 12; }
+    .section-head { display: flex; justify-content: space-between; gap: 1rem; padding: 0.85rem 1rem; border-bottom: 1px solid var(--line); align-items: center; }
+    .section-body { padding: 1rem; }
+    .metric { display: grid; gap: 0.25rem; }
+    .value { font-size: 1.65rem; line-height: 1; font-weight: 650; }
+    .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; }
+    .statusline { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); }
+    .dot { width: 0.6rem; height: 0.6rem; border-radius: 999px; background: var(--bad); }
+    .dot.ok { background: var(--ok); }
+    .source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr)); gap: 0.75rem; }
+    .source-card { border: 1px solid var(--line); border-radius: 8px; padding: 0.8rem; background: var(--panel-2); min-height: 7rem; display: grid; gap: 0.5rem; }
+    .source-title { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+    .pill { border: 1px solid var(--line); border-radius: 999px; padding: 0.12rem 0.45rem; color: var(--muted); font-size: 0.72rem; }
+    .pill.ok { color: var(--ok); }
+    .pill.bad { color: var(--bad); }
+    .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.3rem 0.7rem; color: var(--muted); font-size: 0.82rem; }
+    .kv b { color: var(--ink); font-weight: 550; overflow-wrap: anywhere; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
+    pre { margin: 0; max-height: 24rem; overflow: auto; border-radius: 6px; background: #0b0c0e; color: #d8dde3; padding: 1rem; border: 1px solid var(--line); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .empty { color: var(--muted); padding: 1rem; border: 1px dashed var(--line); border-radius: 8px; }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      nav { display: flex; flex-wrap: wrap; }
+      .span-3, .span-5, .span-7 { grid-column: span 12; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>forecast</h1>
-    <div class="sub">time-resolved, multi-source observational field generator</div>
-    <p>An ingestion and validation engine that pulls heterogeneous real-world data streams, preserves atomic observations, and maintains temporal and spatial fidelity for downstream latent variable construction.</p>
-    <p>Active sources: METAR (aviation weather), AirNow (air quality). Planned: NEXRAD, NLDN, HRRR Smoke, FIRMS, NOTAM, transport, news.</p>
-    <p>The public HTTP surface is not live yet — this domain currently serves as the canonical landing for the project. See the repo for status and roadmap.</p>
-    <div class="meta">
-      <p>repo: <a href="https://github.com/civicbrands/forecast">github.com/civicbrands/forecast</a></p>
-      <p>moved from <code>open.bjl13.org</code></p>
+    <aside>
+      <h1>forecast</h1>
+      <div class="muted">live observational field</div>
+      <nav>
+        <a href="#overview">Overview</a>
+        <a href="#sources">Sources</a>
+        <a href="#latents">Latents</a>
+        <a href="#raw">Raw</a>
+      </nav>
+    </aside>
+    <div class="content">
+      <div class="topbar">
+        <div>
+          <h2>Observational Field</h2>
+          <div id="summary" class="muted">Loading latest field state...</div>
+        </div>
+        <div class="statusline"><span id="health-dot" class="dot"></span><span id="health-text">checking</span><button id="refresh" type="button">Refresh</button></div>
+      </div>
+      <div id="overview" class="grid">
+        <section class="span-3"><div class="section-head"><h3>Sources</h3></div><div class="section-body metric"><div id="metric-sources" class="value">-</div><div class="label">fresh</div></div></section>
+        <section class="span-3"><div class="section-head"><h3>Records</h3></div><div class="section-body metric"><div id="metric-records" class="value">-</div><div class="label">fresh</div></div></section>
+        <section class="span-3"><div class="section-head"><h3>Latents</h3></div><div class="section-body metric"><div id="metric-latents" class="value">-</div><div class="label">latest</div></div></section>
+        <section class="span-3"><div class="section-head"><h3>Window</h3></div><div class="section-body metric"><div id="metric-window" class="value">-</div><div class="label">observed span</div></div></section>
+      </div>
+      <section id="sources" class="span-12"><div class="section-head"><h3>Source Registry</h3><span id="source-count" class="pill">-</span></div><div class="section-body"><div id="sources-grid" class="source-grid"></div></div></section>
+      <div class="grid">
+        <section class="span-7"><div class="section-head"><h3>Latest Collation</h3><span id="collation-id" class="pill">-</span></div><div id="collation-body" class="section-body"></div></section>
+        <section id="latents" class="span-5"><div class="section-head"><h3>Latest Latents</h3><span id="latent-status" class="pill">-</span></div><div id="latents-body" class="section-body"></div></section>
+      </div>
+      <section id="raw" class="span-12"><div class="section-head"><h3>Raw Payload</h3><span class="pill">live</span></div><div class="section-body"><pre id="raw-json">{}</pre></div></section>
     </div>
   </main>
+  <script>
+    const state = { endpoints: [], collation: null, latents: [], snapshots: new Map(), errors: new Map() };
+    const meta = { METAR: "Aviation weather", AIRNOW: "Air quality", FIRMS: "Fire detections", HRRR_SMOKE: "Smoke model", NEXRAD: "Radar metadata", NLDN: "Lightning detections", NOTAM: "Airspace notices" };
+    const el = (id) => document.getElementById(id);
+    const ms = (n) => Number.isFinite(n) ? new Date(n).toLocaleString() : "-";
+    const sec = (n) => Number.isFinite(n) ? new Date(n * 1000).toLocaleString() : "-";
+    const span = (a, b) => Number.isFinite(a) && Number.isFinite(b) ? Math.max(0, Math.round((b - a) / 60)) + "m" : "-";
+    async function get(path) {
+      const res = await fetch(path, { headers: { Accept: "application/json" } });
+      const body = await res.json();
+      if (!res.ok) throw Object.assign(new Error(body.error || res.statusText), { status: res.status, body });
+      return body;
+    }
+    const sourcesFrom = (endpoints) => endpoints.filter((p) => p.startsWith("/snapshots/")).map((p) => p.replace("/snapshots/", ""));
+    async function load() {
+      state.errors.clear();
+      try { await get("/healthz"); el("health-dot").className = "dot ok"; el("health-text").textContent = "online"; }
+      catch { el("health-dot").className = "dot"; el("health-text").textContent = "offline"; }
+      state.endpoints = (await get("/")).endpoints || [];
+      const sources = sourcesFrom(state.endpoints);
+      const [c, l] = await Promise.allSettled([get("/collations/latest"), get("/latents/latest")]);
+      state.collation = c.status === "fulfilled" ? c.value : null;
+      state.latents = l.status === "fulfilled" ? l.value : [];
+      if (c.status === "rejected") state.errors.set("collation", c.reason);
+      if (l.status === "rejected") state.errors.set("latents", l.reason);
+      const snaps = await Promise.allSettled(sources.map((s) => get("/snapshots/" + s)));
+      state.snapshots.clear();
+      snaps.forEach((r, i) => r.status === "fulfilled" ? state.snapshots.set(sources[i], r.value) : state.errors.set(sources[i], r.reason));
+      render(sources);
+    }
+    function render(sources) {
+      const fresh = state.collation ? Object.entries(state.collation.sources || {}) : [];
+      const records = fresh.reduce((sum, [, s]) => sum + (s.record_count || 0), 0);
+      el("metric-sources").textContent = fresh.length;
+      el("metric-records").textContent = records;
+      el("metric-latents").textContent = state.latents.length;
+      el("metric-window").textContent = state.collation ? span(state.collation.observed_at_min, state.collation.observed_at_max) : "-";
+      el("summary").textContent = state.collation ? "Collated " + fresh.length + " source(s) at " + ms(state.collation.collated_at) + "." : "No current collation is available.";
+      el("source-count").textContent = sources.length + " known";
+      el("collation-id").textContent = state.collation && state.collation.id ? "#" + state.collation.id : "-";
+      el("latent-status").textContent = state.latents.length ? state.latents.length + " rows" : "empty";
+      renderSources(sources);
+      renderCollation();
+      renderLatents();
+      el("raw-json").textContent = JSON.stringify({ collation: state.collation, latents: state.latents, snapshots: Object.fromEntries(state.snapshots) }, null, 2);
+    }
+    function renderSources(sources) {
+      el("sources-grid").innerHTML = sources.map((s) => {
+        const snap = state.snapshots.get(s);
+        const err = state.errors.get(s);
+        const fresh = Boolean(state.collation && state.collation.sources && state.collation.sources[s]);
+        return '<div class="source-card"><div class="source-title"><strong>' + s + '</strong><span class="pill ' + (fresh ? "ok" : err ? "bad" : "") + '">' + (fresh ? "fresh" : err ? err.message : "stored") + '</span></div><div class="muted">' + (meta[s] || "Registered source") + '</div><div class="kv"><span>records</span><b>' + (snap ? snap.data.length : "-") + '</b><span>fetched</span><b>' + (snap ? ms(snap.fetched_at) : "-") + '</b><span>observed</span><b>' + (snap ? sec(snap.observed_at_max) : "-") + '</b></div></div>';
+      }).join("");
+    }
+    function renderCollation() {
+      if (!state.collation) { el("collation-body").innerHTML = '<div class="empty">' + ((state.errors.get("collation") || {}).message || "No collation") + '</div>'; return; }
+      const rows = Object.entries(state.collation.sources || {}).map(([n, s]) => '<tr><td>' + n + '</td><td>' + s.record_count + '</td><td>' + ms(s.fetched_at) + '</td><td>#' + s.snapshot_id + '</td></tr>').join("");
+      el("collation-body").innerHTML = '<div class="kv" style="margin-bottom:.8rem"><span>collated</span><b>' + ms(state.collation.collated_at) + '</b><span>observed min</span><b>' + sec(state.collation.observed_at_min) + '</b><span>observed max</span><b>' + sec(state.collation.observed_at_max) + '</b></div><table><thead><tr><th>Source</th><th>Records</th><th>Fetched</th><th>Snapshot</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }
+    function renderLatents() {
+      if (!state.latents.length) { el("latents-body").innerHTML = '<div class="empty">' + ((state.errors.get("latents") || {}).message || "No latents") + '</div>'; return; }
+      el("latents-body").innerHTML = '<table><thead><tr><th>Name</th><th>Value</th><th>Confidence</th></tr></thead><tbody>' + state.latents.map((l) => '<tr><td>' + l.name + '</td><td>' + l.value + '</td><td>' + (l.confidence ?? "-") + '</td></tr>').join("") + '</tbody></table>';
+    }
+    el("refresh").addEventListener("click", load);
+    load().catch((err) => { el("summary").textContent = err.message || String(err); el("health-text").textContent = "error"; });
+  </script>
 </body>
 </html>

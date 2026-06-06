@@ -7,11 +7,27 @@ const registry_1 = require("../sources/registry");
 const latents_1 = require("../latents");
 const registry_2 = require("../sources/registry");
 const notam_schema_1 = require("../notam-schema");
+const frontend_1 = require("../frontend");
 function json(body, status = 200) {
     return new Response(JSON.stringify(body), {
         status,
         headers: { "Content-Type": "application/json" },
     });
+}
+function html(body) {
+    return new Response(body, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+}
+function wantsHtml(req) {
+    const accept = req.headers.get("accept") ?? "";
+    return accept.includes("text/html") && !accept.includes("application/json");
+}
+function endpointIndex() {
+    const snapshotRoutes = (0, registry_1.knownSourceNames)().map((s) => `/snapshots/${s}`);
+    return {
+        endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
+    };
 }
 function buildContext(env) {
     return {
@@ -134,10 +150,7 @@ exports.default = {
             return snap ? json(snap) : json({ error: "no_snapshot" }, 404);
         }
         if (url.pathname === "/") {
-            const snapshotRoutes = (0, registry_1.knownSourceNames)().map((s) => `/snapshots/${s}`);
-            return json({
-                endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
-            });
+            return wantsHtml(req) ? html((0, frontend_1.renderFrontendHtml)()) : json(endpointIndex());
         }
         return json({ error: "not_found" }, 404);
     },
