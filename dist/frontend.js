@@ -1,4 +1,8 @@
-<!doctype html>
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.renderFrontendHtml = renderFrontendHtml;
+function renderFrontendHtml() {
+    return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -365,17 +369,17 @@
         const card = document.createElement("div");
         card.className = "source-card";
         const status = fresh ? "fresh" : result ? result.status : err ? err.message : "unknown";
-        card.innerHTML = `
+        card.innerHTML = \`
           <div class="source-title">
-            <strong>${source}</strong>
-            <span class="pill ${fresh ? "ok" : err ? "bad" : ""}">${status}</span>
+            <strong>\${source}</strong>
+            <span class="pill \${fresh ? "ok" : err ? "bad" : ""}">\${status}</span>
           </div>
-          <div class="muted">${sourceMeta[source] || "Registered source"}</div>
+          <div class="muted">\${sourceMeta[source] || "Registered source"}</div>
           <div class="kv">
-            <span>records</span><b>${snap ? snap.data.length : result ? result.record_count : "-"}</b>
-            <span>fetched</span><b>${snap ? fmtDateMs(snap.fetched_at) : result && result.fetched_at ? fmtDateMs(result.fetched_at) : "-"}</b>
-            <span>observed</span><b>${snap ? fmtDateSec(snap.observed_at_max) : "-"}</b>
-          </div>`;
+            <span>records</span><b>\${snap ? snap.data.length : result ? result.record_count : "-"}</b>
+            <span>fetched</span><b>\${snap ? fmtDateMs(snap.fetched_at) : result && result.fetched_at ? fmtDateMs(result.fetched_at) : "-"}</b>
+            <span>observed</span><b>\${snap ? fmtDateSec(snap.observed_at_max) : "-"}</b>
+          </div>\`;
         grid.appendChild(card);
       }
     }
@@ -386,40 +390,40 @@
         body.innerHTML = '<div class="empty">No decoded observations are available for this field.</div>';
         return;
       }
-      body.innerHTML = `<table><thead><tr><th>Source</th><th>Observation</th><th>Usable reading</th></tr></thead><tbody>${state.observations.map((o) =>
-        `<tr><td>${o.source}</td><td>${o.title}</td><td>${o.summary}</td></tr>`
-      ).join("")}</tbody></table>`;
+      body.innerHTML = \`<table><thead><tr><th>Source</th><th>Observation</th><th>Usable reading</th></tr></thead><tbody>\${state.observations.map((o) =>
+        \`<tr><td>\${o.source}</td><td>\${o.title}</td><td>\${o.summary}</td></tr>\`
+      ).join("")}</tbody></table>\`;
     }
 
     function renderCollation() {
       const body = el("collation-body");
       if (!state.collation) {
         const err = state.errors.get("collation");
-        body.innerHTML = `<div class="empty">${err ? err.message : "No collation"}</div>`;
+        body.innerHTML = \`<div class="empty">\${err ? err.message : "No collation"}</div>\`;
         return;
       }
       const rows = Object.entries(state.collation.sources || {}).map(([name, s]) =>
-        `<tr><td>${name}</td><td>${s.record_count}</td><td>${fmtDateMs(s.fetched_at)}</td><td>${s.snapshot_id !== undefined ? "#" + s.snapshot_id : "transient"}</td></tr>`
+        \`<tr><td>\${name}</td><td>\${s.record_count}</td><td>\${fmtDateMs(s.fetched_at)}</td><td>\${s.snapshot_id !== undefined ? "#" + s.snapshot_id : "transient"}</td></tr>\`
       ).join("");
-      body.innerHTML = `
+      body.innerHTML = \`
         <div class="kv" style="margin-bottom: 0.8rem">
-          <span>collated</span><b>${fmtDateMs(state.collation.collated_at)}</b>
-          <span>observed min</span><b>${fmtDateSec(state.collation.observed_at_min)}</b>
-          <span>observed max</span><b>${fmtDateSec(state.collation.observed_at_max)}</b>
+          <span>collated</span><b>\${fmtDateMs(state.collation.collated_at)}</b>
+          <span>observed min</span><b>\${fmtDateSec(state.collation.observed_at_min)}</b>
+          <span>observed max</span><b>\${fmtDateSec(state.collation.observed_at_max)}</b>
         </div>
-        <table><thead><tr><th>Source</th><th>Records</th><th>Fetched</th><th>Snapshot</th></tr></thead><tbody>${rows}</tbody></table>`;
+        <table><thead><tr><th>Source</th><th>Records</th><th>Fetched</th><th>Snapshot</th></tr></thead><tbody>\${rows}</tbody></table>\`;
     }
 
     function renderLatents() {
       const body = el("latents-body");
       if (!state.latents.length) {
         const err = state.errors.get("latents");
-        body.innerHTML = `<div class="empty">${err ? err.message : "No latents"}</div>`;
+        body.innerHTML = \`<div class="empty">\${err ? err.message : "No latents"}</div>\`;
         return;
       }
-      body.innerHTML = `<table><thead><tr><th>Name</th><th>Value</th><th>Confidence</th></tr></thead><tbody>${state.latents.map((l) =>
-        `<tr><td>${l.name}</td><td>${l.value}</td><td>${l.confidence ?? "-"}</td></tr>`
-      ).join("")}</tbody></table>`;
+      body.innerHTML = \`<table><thead><tr><th>Name</th><th>Value</th><th>Confidence</th></tr></thead><tbody>\${state.latents.map((l) =>
+        \`<tr><td>\${l.name}</td><td>\${l.value}</td><td>\${l.confidence ?? "-"}</td></tr>\`
+      ).join("")}</tbody></table>\`;
     }
 
     el("refresh").addEventListener("click", () => load().catch(showFatal));
@@ -461,4 +465,6 @@
     load().catch(showFatal);
   </script>
 </body>
-</html>
+</html>`;
+}
+//# sourceMappingURL=frontend.js.map

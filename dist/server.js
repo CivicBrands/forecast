@@ -5,6 +5,8 @@ const node_http_1 = require("node:http");
 const store_1 = require("./store");
 const registry_1 = require("./sources/registry");
 const frontend_1 = require("./frontend");
+const field_1 = require("./field");
+const config_1 = require("./config");
 function json(res, status, body) {
     res.writeHead(status, { "Content-Type": "application/json" });
     res.end(JSON.stringify(body));
@@ -20,7 +22,7 @@ function wantsHtml(req) {
 function endpointIndex() {
     const snapshotRoutes = (0, registry_1.knownSourceNames)().map((s) => `/snapshots/${s}`);
     return {
-        endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
+        endpoints: ["/healthz", "/field/current", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
     };
 }
 function handle(req, res) {
@@ -29,6 +31,23 @@ function handle(req, res) {
         return json(res, 405, { error: "method_not_allowed" });
     if (url.pathname === "/healthz")
         return json(res, 200, { ok: true });
+    if (url.pathname === "/field/current") {
+        try {
+            const location = (0, field_1.parseFieldLocation)(url.searchParams, {
+                ...field_1.KC_DEFAULTS,
+                lat: config_1.config.user.lat,
+                lon: config_1.config.user.lon,
+                radiusMiles: config_1.config.user.radiusMiles,
+            });
+            (0, field_1.buildTransientField)(location, process.env)
+                .then((field) => json(res, 200, field))
+                .catch((err) => json(res, 500, { error: err instanceof Error ? err.message : String(err) }));
+            return;
+        }
+        catch (err) {
+            return json(res, 400, { error: err instanceof Error ? err.message : "invalid_location" });
+        }
+    }
     if (url.pathname === "/collations/latest") {
         const c = (0, store_1.latestCollation)();
         return c ? json(res, 200, c) : json(res, 404, { error: "no_collation" });

@@ -6,6 +6,7 @@ import { deriveLatents } from "../latents";
 import { NOTAM_SOURCE_NAME } from "../sources/registry";
 import { NotamIngestRequestSchema, epochSeconds as notamEpoch } from "../notam-schema";
 import { renderFrontendHtml } from "../frontend";
+import { buildTransientField, KC_DEFAULTS, parseFieldLocation } from "../field";
 
 export interface Env {
   DB: D1Database;
@@ -44,7 +45,7 @@ function wantsHtml(req: Request): boolean {
 function endpointIndex() {
   const snapshotRoutes = knownSourceNames().map((s) => `/snapshots/${s}`);
   return {
-    endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
+    endpoints: ["/healthz", "/field/current", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
   };
 }
 
@@ -149,6 +150,20 @@ export default {
     if (req.method !== "GET") return json({ error: "method_not_allowed" }, 405);
 
     if (url.pathname === "/healthz") return json({ ok: true });
+
+    if (url.pathname === "/field/current") {
+      try {
+        const location = parseFieldLocation(url.searchParams, {
+          ...KC_DEFAULTS,
+          lat: Number(env.USER_LAT ?? KC_DEFAULTS.lat),
+          lon: Number(env.USER_LON ?? KC_DEFAULTS.lon),
+          radiusMiles: Number(env.RADIUS_MILES ?? KC_DEFAULTS.radiusMiles),
+        });
+        return json(await buildTransientField(location, env as unknown as Record<string, string | undefined>));
+      } catch (err) {
+        return json({ error: err instanceof Error ? err.message : "invalid_location" }, 400);
+      }
+    }
 
     if (url.pathname === "/collations/latest") {
       const c = await latestCollation(env.DB);

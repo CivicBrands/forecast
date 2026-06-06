@@ -8,6 +8,7 @@ const latents_1 = require("../latents");
 const registry_2 = require("../sources/registry");
 const notam_schema_1 = require("../notam-schema");
 const frontend_1 = require("../frontend");
+const field_1 = require("../field");
 function json(body, status = 200) {
     return new Response(JSON.stringify(body), {
         status,
@@ -26,7 +27,7 @@ function wantsHtml(req) {
 function endpointIndex() {
     const snapshotRoutes = (0, registry_1.knownSourceNames)().map((s) => `/snapshots/${s}`);
     return {
-        endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
+        endpoints: ["/healthz", "/field/current", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
     };
 }
 function buildContext(env) {
@@ -126,6 +127,20 @@ exports.default = {
             return json({ error: "method_not_allowed" }, 405);
         if (url.pathname === "/healthz")
             return json({ ok: true });
+        if (url.pathname === "/field/current") {
+            try {
+                const location = (0, field_1.parseFieldLocation)(url.searchParams, {
+                    ...field_1.KC_DEFAULTS,
+                    lat: Number(env.USER_LAT ?? field_1.KC_DEFAULTS.lat),
+                    lon: Number(env.USER_LON ?? field_1.KC_DEFAULTS.lon),
+                    radiusMiles: Number(env.RADIUS_MILES ?? field_1.KC_DEFAULTS.radiusMiles),
+                });
+                return json(await (0, field_1.buildTransientField)(location, env));
+            }
+            catch (err) {
+                return json({ error: err instanceof Error ? err.message : "invalid_location" }, 400);
+            }
+        }
         if (url.pathname === "/collations/latest") {
             const c = await (0, store_1.latestCollation)(env.DB);
             return c ? json(c) : json({ error: "no_collation" }, 404);

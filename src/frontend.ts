@@ -68,6 +68,7 @@ export function renderFrontendHtml(): string {
     .dot.ok { background: var(--ok); }
     .dot.bad { background: var(--bad); }
     .toolbar { display: flex; gap: 0.5rem; align-items: center; }
+    .locationbar { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
     .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1rem; }
     section {
       border: 1px solid var(--line);
@@ -130,6 +131,8 @@ export function renderFrontendHtml(): string {
     .muted { color: var(--muted); }
     .error { color: var(--bad); }
     .empty { color: var(--muted); padding: 1rem; border: 1px dashed var(--line); border-radius: 8px; }
+    details.location-details { color: var(--muted); font-size: 0.8rem; }
+    details.location-details summary { cursor: pointer; }
 
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; }
@@ -149,6 +152,7 @@ export function renderFrontendHtml(): string {
       <nav>
         <a href="#overview">Overview</a>
         <a href="#sources">Sources</a>
+        <a href="#observed">Observed</a>
         <a href="#latents">Latents</a>
         <a href="#raw">Raw</a>
       </nav>
@@ -162,9 +166,18 @@ export function renderFrontendHtml(): string {
         </div>
         <div class="toolbar">
           <div class="statusline"><span id="health-dot" class="dot"></span><span id="health-text">checking</span></div>
+          <div class="locationbar">
+            <span id="location-label" class="pill">Kansas City area</span>
+            <button id="use-location" type="button" title="Use browser location">Use my location</button>
+            <button id="reset-location" type="button" title="Reset to Kansas City">KC</button>
+          </div>
           <button id="refresh" type="button" title="Refresh">Refresh</button>
         </div>
       </div>
+      <details class="location-details">
+        <summary>Location details</summary>
+        <div id="location-details">Default Kansas City area, 30 mile radius.</div>
+      </details>
 
       <div id="overview" class="grid">
         <section class="span-3">
@@ -190,6 +203,11 @@ export function renderFrontendHtml(): string {
         <div class="section-body"><div id="sources-grid" class="source-grid"></div></div>
       </section>
 
+      <section id="observed" class="span-12">
+        <div class="section-head"><h3>Observed Info</h3><span id="observed-count" class="pill">-</span></div>
+        <div class="section-body" id="observed-body"></div>
+      </section>
+
       <div class="grid">
         <section class="span-7">
           <div class="section-head"><h3>Latest Collation</h3><span id="collation-id" class="pill">-</span></div>
@@ -209,7 +227,18 @@ export function renderFrontendHtml(): string {
   </main>
 
   <script>
-    const state = { endpoints: [], collation: null, latents: [], snapshots: new Map(), errors: new Map() };
+    const state = {
+      endpoints: [],
+      field: null,
+      collation: null,
+      latents: [],
+      observations: [],
+      snapshots: new Map(),
+      sourceResults: new Map(),
+      errors: new Map(),
+      locationMode: "default",
+      browserLocation: null
+    };
     const sourceMeta = {
       METAR: "Aviation weather",
       AIRNOW: "Air quality",
@@ -250,6 +279,17 @@ export function renderFrontendHtml(): string {
         .map((p) => p.replace("/snapshots/", ""));
     }
 
+    function fieldPath() {
+      if (!state.browserLocation) return "/field/current";
+      const p = new URLSearchParams({
+        lat: String(state.browserLocation.lat),
+        lon: String(state.browserLocation.lon),
+        radius: String(state.browserLocation.radiusMiles || 30),
+        location_source: "browser"
+      });
+      return "/field/current?" + p.toString();
+    }
+
     async function load() {
       el("health-text").textContent = "checking";
       el("health-dot").className = "dot";
@@ -264,28 +304,16 @@ export function renderFrontendHtml(): string {
         el("health-dot").className = "dot bad";
       }
 
-      const root = await getJson("/");
+      const [root, field] = await Promise.all([getJson("/"), getJson(fieldPath())]);
       state.endpoints = root.endpoints || [];
-      const sources = endpointSources(state.endpoints);
+      state.field = field;
+      state.collation = field.collation;
+      state.latents = field.latents || [];
+      state.observations = field.observations || [];
+      state.snapshots = new Map(Object.entries(field.snapshots || {}));
+      state.sourceResults = new Map((field.sources || []).map((s) => [s.name, s]));
 
-      const [collationResult, latentResult] = await Promise.allSettled([
-        getJson("/collations/latest"),
-        getJson("/latents/latest")
-      ]);
-      state.collation = collationResult.status === "fulfilled" ? collationResult.value : null;
-      state.latents = latentResult.status === "fulfilled" ? latentResult.value : [];
-      if (collationResult.status === "rejected") state.errors.set("collation", collationResult.reason);
-      if (latentResult.status === "rejected") state.errors.set("latents", latentResult.reason);
-
-      const snapshotResults = await Promise.allSettled(sources.map((source) => getJson("/snapshots/" + source)));
-      state.snapshots.clear();
-      snapshotResults.forEach((result, i) => {
-        const source = sources[i];
-        if (result.status === "fulfilled") state.snapshots.set(source, result.value);
-        else state.errors.set(source, result.reason);
-      });
-
-      render(sources);
+      render(endpointSources(state.endpoints));
     }
 
     function render(sources) {
@@ -301,15 +329,30 @@ export function renderFrontendHtml(): string {
       el("source-count").textContent = sources.length + " known";
       el("collation-id").textContent = state.collation && state.collation.id ? "#" + state.collation.id : "-";
       el("latent-status").textContent = state.latents.length ? state.latents.length + " rows" : "empty";
+      el("observed-count").textContent = state.observations.length ? state.observations.length + " items" : "empty";
+      renderLocation();
 
       renderSources(sources);
+      renderObserved();
       renderCollation();
       renderLatents();
       el("raw-json").textContent = JSON.stringify({
+        field: state.field,
         collation: state.collation,
         latents: state.latents,
+        observations: state.observations,
         snapshots: Object.fromEntries(state.snapshots)
       }, null, 2);
+    }
+
+    function renderLocation() {
+      const loc = state.field && state.field.location;
+      const label = loc ? loc.label : "Kansas City area";
+      el("location-label").textContent = label;
+      const sourceText = loc && loc.source === "browser" ? "Browser location" : "Kansas City default";
+      const coords = loc ? loc.lat.toFixed(3) + ", " + loc.lon.toFixed(3) : "39.100, -94.579";
+      const radius = loc ? loc.radiusMiles : 30;
+      el("location-details").textContent = sourceText + "; " + coords + "; " + radius + " mile radius.";
     }
 
     function renderSources(sources) {
@@ -317,23 +360,36 @@ export function renderFrontendHtml(): string {
       grid.innerHTML = "";
       for (const source of sources) {
         const snap = state.snapshots.get(source);
-        const err = state.errors.get(source);
+        const result = state.sourceResults.get(source);
+        const err = result && result.status === "error" ? { message: result.error } : null;
         const fresh = Boolean(state.collation && state.collation.sources && state.collation.sources[source]);
         const card = document.createElement("div");
         card.className = "source-card";
+        const status = fresh ? "fresh" : result ? result.status : err ? err.message : "unknown";
         card.innerHTML = \`
           <div class="source-title">
             <strong>\${source}</strong>
-            <span class="pill \${fresh ? "ok" : err ? "bad" : ""}">\${fresh ? "fresh" : err ? err.message : "stored"}</span>
+            <span class="pill \${fresh ? "ok" : err ? "bad" : ""}">\${status}</span>
           </div>
           <div class="muted">\${sourceMeta[source] || "Registered source"}</div>
           <div class="kv">
-            <span>records</span><b>\${snap ? snap.data.length : "-"}</b>
-            <span>fetched</span><b>\${snap ? fmtDateMs(snap.fetched_at) : "-"}</b>
+            <span>records</span><b>\${snap ? snap.data.length : result ? result.record_count : "-"}</b>
+            <span>fetched</span><b>\${snap ? fmtDateMs(snap.fetched_at) : result && result.fetched_at ? fmtDateMs(result.fetched_at) : "-"}</b>
             <span>observed</span><b>\${snap ? fmtDateSec(snap.observed_at_max) : "-"}</b>
           </div>\`;
         grid.appendChild(card);
       }
+    }
+
+    function renderObserved() {
+      const body = el("observed-body");
+      if (!state.observations.length) {
+        body.innerHTML = '<div class="empty">No decoded observations are available for this field.</div>';
+        return;
+      }
+      body.innerHTML = \`<table><thead><tr><th>Source</th><th>Observation</th><th>Usable reading</th></tr></thead><tbody>\${state.observations.map((o) =>
+        \`<tr><td>\${o.source}</td><td>\${o.title}</td><td>\${o.summary}</td></tr>\`
+      ).join("")}</tbody></table>\`;
     }
 
     function renderCollation() {
@@ -344,7 +400,7 @@ export function renderFrontendHtml(): string {
         return;
       }
       const rows = Object.entries(state.collation.sources || {}).map(([name, s]) =>
-        \`<tr><td>\${name}</td><td>\${s.record_count}</td><td>\${fmtDateMs(s.fetched_at)}</td><td>#\${s.snapshot_id}</td></tr>\`
+        \`<tr><td>\${name}</td><td>\${s.record_count}</td><td>\${fmtDateMs(s.fetched_at)}</td><td>\${s.snapshot_id !== undefined ? "#" + s.snapshot_id : "transient"}</td></tr>\`
       ).join("");
       body.innerHTML = \`
         <div class="kv" style="margin-bottom: 0.8rem">
@@ -368,6 +424,36 @@ export function renderFrontendHtml(): string {
     }
 
     el("refresh").addEventListener("click", () => load().catch(showFatal));
+    el("reset-location").addEventListener("click", () => {
+      state.locationMode = "default";
+      state.browserLocation = null;
+      try { localStorage.removeItem("forecast.browserLocation"); } catch {}
+      load().catch(showFatal);
+    });
+    el("use-location").addEventListener("click", () => {
+      if (!navigator.geolocation) {
+        el("location-label").textContent = "Location unavailable";
+        return;
+      }
+      el("location-label").textContent = "Requesting location";
+      navigator.geolocation.getCurrentPosition((pos) => {
+        state.locationMode = "browser";
+        state.browserLocation = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          radiusMiles: 30
+        };
+        try { localStorage.setItem("forecast.browserLocation", JSON.stringify(state.browserLocation)); } catch {}
+        load().catch(showFatal);
+      }, () => {
+        el("location-label").textContent = "Kansas City area";
+        el("location-details").textContent = "Browser location was unavailable; using Kansas City default.";
+      }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 });
+    });
+    try {
+      const saved = localStorage.getItem("forecast.browserLocation");
+      if (saved) state.browserLocation = JSON.parse(saved);
+    } catch {}
     function showFatal(err) {
       el("summary").textContent = err.message || String(err);
       el("health-dot").className = "dot bad";

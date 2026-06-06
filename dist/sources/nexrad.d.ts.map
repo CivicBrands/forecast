@@ -1,0 +1,1 @@
+{"version":3,"file":"nexrad.d.ts","sourceRoot":"","sources":["../../src/sources/nexrad.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,CAAC,EAAE,MAAM,KAAK,CAAC;AACxB,OAAO,EAAE,MAAM,EAAiB,MAAM,SAAS,CAAC;AAEhD,QAAA,MAAM,uBAAuB;;;;;;;;;;;;;;;EAK3B,CAAC;AAIH,MAAM,MAAM,iBAAiB,GAAG,CAAC,CAAC,KAAK,CAAC,OAAO,uBAAuB,CAAC,CAAC;AAExE,eAAO,MAAM,YAAY,EAAE,MAAM,CAAC,iBAAiB,CAmClD,CAAC"}

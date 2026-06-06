@@ -43,6 +43,12 @@ test("GET / returns dashboard HTML for browsers", async () => {
   assert.match(await r.text(), /Observational Field/);
 });
 
+test("GET /field/current rejects invalid location query", async () => {
+  const r = await fetch(`${base}/field/current?lat=999&lon=-94`);
+  assert.equal(r.status, 400);
+  assert.deepEqual(await r.json(), { error: "invalid_lat" });
+});
+
 test("GET /snapshots/UNKNOWN returns 404", async () => {
   const r = await fetch(`${base}/snapshots/BOGUS`);
   assert.equal(r.status, 404);

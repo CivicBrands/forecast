@@ -1,0 +1,1 @@
+{"version":3,"file":"hrrr_smoke.d.ts","sourceRoot":"","sources":["../../src/sources/hrrr_smoke.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,CAAC,EAAE,MAAM,KAAK,CAAC;AACxB,OAAO,EAAE,MAAM,EAAiB,MAAM,SAAS,CAAC;AAEhD,QAAA,MAAM,0BAA0B;;;;;;;;;;;;;;;;;;EAM9B,CAAC;AAIH,MAAM,MAAM,oBAAoB,GAAG,CAAC,CAAC,KAAK,CAAC,OAAO,0BAA0B,CAAC,CAAC;AAE9E,eAAO,MAAM,eAAe,EAAE,MAAM,CAAC,oBAAoB,CA4BxD,CAAC"}

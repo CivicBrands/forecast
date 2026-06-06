@@ -2,6 +2,8 @@ import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { latentsByName, latestCollation, latestLatents, latestSnapshot } from "./store";
 import { knownSourceNames } from "./sources/registry";
 import { renderFrontendHtml } from "./frontend";
+import { buildTransientField, KC_DEFAULTS, parseFieldLocation } from "./field";
+import { config } from "./config";
 
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -21,7 +23,7 @@ function wantsHtml(req: IncomingMessage): boolean {
 function endpointIndex() {
   const snapshotRoutes = knownSourceNames().map((s) => `/snapshots/${s}`);
   return {
-    endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
+    endpoints: ["/healthz", "/field/current", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
   };
 }
 
@@ -31,6 +33,23 @@ function handle(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== "GET") return json(res, 405, { error: "method_not_allowed" });
 
   if (url.pathname === "/healthz") return json(res, 200, { ok: true });
+
+  if (url.pathname === "/field/current") {
+    try {
+      const location = parseFieldLocation(url.searchParams, {
+        ...KC_DEFAULTS,
+        lat: config.user.lat,
+        lon: config.user.lon,
+        radiusMiles: config.user.radiusMiles,
+      });
+      buildTransientField(location, process.env)
+        .then((field) => json(res, 200, field))
+        .catch((err) => json(res, 500, { error: err instanceof Error ? err.message : String(err) }));
+      return;
+    } catch (err) {
+      return json(res, 400, { error: err instanceof Error ? err.message : "invalid_location" });
+    }
+  }
 
   if (url.pathname === "/collations/latest") {
     const c = latestCollation();

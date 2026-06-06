@@ -1,0 +1,52 @@
+import { z } from "zod";
+import { Source } from "./types";
+declare const FirmsObservationSchema: z.ZodObject<{
+    latitude: z.ZodNumber;
+    longitude: z.ZodNumber;
+    bright_ti4: z.ZodOptional<z.ZodNumber>;
+    bright_ti5: z.ZodOptional<z.ZodNumber>;
+    scan: z.ZodOptional<z.ZodNumber>;
+    track: z.ZodOptional<z.ZodNumber>;
+    acq_date: z.ZodString;
+    acq_time: z.ZodString;
+    satellite: z.ZodOptional<z.ZodString>;
+    instrument: z.ZodOptional<z.ZodString>;
+    confidence: z.ZodOptional<z.ZodUnion<[z.ZodString, z.ZodNumber]>>;
+    version: z.ZodOptional<z.ZodString>;
+    frp: z.ZodOptional<z.ZodNumber>;
+    daynight: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    latitude: number;
+    longitude: number;
+    acq_date: string;
+    acq_time: string;
+    bright_ti4?: number | undefined;
+    bright_ti5?: number | undefined;
+    scan?: number | undefined;
+    track?: number | undefined;
+    satellite?: string | undefined;
+    instrument?: string | undefined;
+    confidence?: string | number | undefined;
+    version?: string | undefined;
+    frp?: number | undefined;
+    daynight?: string | undefined;
+}, {
+    latitude: number;
+    longitude: number;
+    acq_date: string;
+    acq_time: string;
+    bright_ti4?: number | undefined;
+    bright_ti5?: number | undefined;
+    scan?: number | undefined;
+    track?: number | undefined;
+    satellite?: string | undefined;
+    instrument?: string | undefined;
+    confidence?: string | number | undefined;
+    version?: string | undefined;
+    frp?: number | undefined;
+    daynight?: string | undefined;
+}>;
+export type FirmsObservation = z.infer<typeof FirmsObservationSchema>;
+export declare const firmsSource: Source<FirmsObservation>;
+export {};
+//# sourceMappingURL=firms.d.ts.map
