@@ -12,12 +12,12 @@
     "test": "node --test --require ts-node/register test/*.test.ts"
   },
   "dependencies": {
-    "fast-xml-parser": "^4.5.0",
+    "fast-xml-parser": "^5.7.0",
     "solclientjs": "^10.17.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "^24.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
