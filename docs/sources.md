@@ -5,69 +5,113 @@
 
 # Sources
 
-This document enumerates the data sources currently ingested by `forecast-v2` and describes the procedure by which a new source is added. It does not characterize source quality. Source fidelity is preserved; source authority is not asserted.
+This document specifies the `Source` interface, the procedure for onboarding a new source, and per-source detail for every source currently in the registry. Source fidelity is preserved; source authority is not asserted.
+
+---
+
+## The `Source` Interface
+
+Every source is a value implementing `Source<T>` from `src/sources/types.ts`:
+
+```ts
+interface Source<T> {
+  name: string;                                 // stable identifier (UPPER_SNAKE)
+  cadenceMs: number;                            // minimum interval between fetches (Node)
+  schema: z.ZodType<T[]>;                       // validated response shape
+  isEnabled(ctx: SourceContext): boolean;       // false when env is missing
+  fetch(ctx: SourceContext): Promise<T[]>;      // returns validated observations
+  observedAt(data: T[]): { min: number; max: number };  // epoch-seconds bounds
+}
+```
+
+Sources are listed in `src/sources/registry.ts`. The runtime iterates the registry and:
+
+- **SHALL** skip a source whose `isEnabled` returns false. Disabled sources are not error states.
+- **MAY** skip a source whose `cadenceMs` has not elapsed since its previous fetch.
+- **MUST NOT** persist an empty observation array.
+- **MUST NOT** transform, normalize, or rename upstream fields.
 
 ---
 
 ## Onboarding Procedure
 
-A new source **MUST**:
-
-- Be reachable over a stable, documented endpoint
-- Return responses with a declared, typed shape
-- Carry observation timestamps that can be resolved to epoch seconds
-- Be expressible without aggregation, smoothing, or destructive transformation at ingestion
-
-The current procedure (pre-framework) is mechanical and repeated across the Node and Worker runtimes. A formal `Source` interface is planned; see the roadmap. Until then:
-
-1. Define a Zod schema for one observation and the array response in `src/ingest.ts`. Field names **MUST** match upstream exactly.
-2. Export `ingestXxx(lat, lon, radiusMiles, ...auth)` from `src/ingest.ts`. The function fetches the upstream endpoint, parses the response with `safeParse`, and throws on validation failure.
-3. Add `persistXxx` to `src/index.ts` and `src/worker/index.ts`. The helper derives `observed_at_min` and `observed_at_max` from upstream timestamps and calls `appendSnapshot`.
-4. Add the new literal to `SourceKey` in both `src/store.ts` and `src/worker/store.ts`. Add the same literal to `ALL_SOURCES` in both `src/collate.ts` and `src/worker/collate.ts`, and to `KNOWN_SOURCES` in both `src/server.ts` and `src/worker/index.ts`.
-5. Add fixtures and extend the collation test in `test/collate.test.ts`.
+1. Add a new module `src/sources/<name>.ts` exporting a `Source` value.
+2. Define the Zod schema. Field names **MUST** match the upstream response exactly.
+3. Implement `isEnabled` to check for the credentials or configuration the source requires. A source with no preconditions returns `true`.
+4. Implement `fetch` to obtain raw data, validate it with the schema, and return the array. Validation failure **MUST** throw.
+5. Implement `observedAt` to extract epoch-seconds bounds from the validated payload. If the source carries no per-observation timestamp, return the fetch time for both bounds.
+6. Register the source in `src/sources/registry.ts`.
 
 > [!CAUTION]
 > A source whose response shape is unstable **MUST NOT** be added without explicit handling of the variation in its Zod schema. Silent coercion is a structural failure.
+
+No further edits to `store`, `collate`, `server`, or the Worker entry are required. The registry is the single point of truth.
 
 ---
 
 ## Active Sources
 
-### METAR
+### METAR — `src/sources/metar.ts`
 
 Surface aviation weather observations.
 
 - **Endpoint**: `https://aviationweather.gov/api/data/metar?bbox={S,W,N,E}&format=json`
-- **Authentication**: none required
-- **Geographic resolution**: bounding box computed from `USER_LAT`, `USER_LON`, `RADIUS_MILES` (`bboxFromPoint` in `src/ingest.ts`)
-- **Schema**: `MetarObservationSchema` — `temp`, `dewp`, `wdir`, `wspd`, `wg` (optional), `visib` (number or string; preserved as-received), `altim`, `clouds` (layered, with `cover` and optional `base`), `fltCat`, raw observation string `rawOb`
-- **Observation time**: `obsTime`, epoch seconds, as supplied
-- **Cadence**: every tick
+- **Authentication**: none
+- **Geographic resolution**: bounding box from `USER_LAT`, `USER_LON`, `RADIUS_MILES`
+- **Cadence**: 5 minutes
+- **Always enabled**
 
-### AirNow
+### AIRNOW — `src/sources/airnow.ts`
 
 Surface air quality observations (O3, PM2.5, PM10).
 
-- **Endpoint**: `https://www.airnowapi.org/aq/observation/latLong/current/?format=application/json&latitude={lat}&longitude={lon}&distance={miles}&API_KEY={key}`
-- **Authentication**: `AIRNOW_API_KEY` (issued without cost by the upstream provider)
-- **Geographic resolution**: latitude, longitude, and radius in miles passed directly to the endpoint
-- **Schema**: `AirNowObservationSchema` — `DateObserved` (string), `HourObserved` (integer), `ReportingArea`, `StateCode`, `Latitude`, `Longitude`, `ParameterName`, `AQI`, `Category`
-- **Observation time**: composed from `DateObserved` and `HourObserved`; see `persistAirNow` in `src/index.ts`
-- **Cadence**: every tick
+- **Endpoint**: `https://www.airnowapi.org/aq/observation/latLong/current/...`
+- **Authentication**: `AIRNOW_API_KEY` (free)
+- **Cadence**: 5 minutes
+- **Enabled when**: `AIRNOW_API_KEY` is set
 
----
+### FIRMS — `src/sources/firms.ts`
 
-## Planned Sources
+Active fire detections from VIIRS (NASA FIRMS).
 
-The following sources are under evaluation. Inclusion is contingent on their meeting the structural requirements above.
+- **Endpoint**: `https://firms.modaps.eosdis.nasa.gov/api/area/csv/{KEY}/VIIRS_SNPP_NRT/{bbox}/1`
+- **Authentication**: `FIRMS_MAP_KEY`
+- **Format**: CSV; parsed in-source
+- **Cadence**: 60 minutes
+- **Enabled when**: `FIRMS_MAP_KEY` is set
 
-| Source | Class |
-|---|---|
-| NEXRAD | Radar reflectivity, echo tops, storm motion |
-| NLDN | Lightning events (subscription-gated) |
-| HRRR Smoke | Surface and column smoke, wind vectors |
-| FIRMS | Satellite fire detections |
-| NOTAM | Airspace restrictions |
-| Transport | Travel time, delay, incidents |
-| News (RSS) | Per-source atomic articles |
-| Socioeconomic | Fuel prices, economic indicators |
+### HRRR_SMOKE — `src/sources/hrrr_smoke.ts`
+
+Surface and column smoke from HRRR-Smoke, expected via a JSON proxy (the upstream native format is GRIB2 and is **NOT** decoded in-process).
+
+- **Endpoint**: configured via `HRRR_SMOKE_ENDPOINT`
+- **Authentication**: none beyond the endpoint URL
+- **Cadence**: 60 minutes
+- **Enabled when**: `HRRR_SMOKE_ENDPOINT` is set
+
+### NEXRAD — `src/sources/nexrad.ts`
+
+Latest Level-2 radar scan metadata from `s3://unidata-nexrad-level2`. This source records *the existence and key of* the most recent scan per station. It **DOES NOT** decode the radar volume.
+
+- **Endpoint**: `https://unidata-nexrad-level2.s3.amazonaws.com/?list-type=2&prefix=...`
+- **Authentication**: none
+- **Cadence**: 10 minutes
+- **Enabled when**: `NEXRAD_STATIONS` is set (comma-separated station IDs)
+
+### NLDN — `src/sources/nldn.ts`
+
+Lightning detections from the National Lightning Detection Network. Subscription-gated.
+
+- **Endpoint**: configured via `NLDN_ENDPOINT`
+- **Authentication**: `Bearer NLDN_TOKEN`
+- **Cadence**: 5 minutes
+- **Enabled when**: both `NLDN_TOKEN` and `NLDN_ENDPOINT` are set
+
+### NOTAM — `src/sources/notam.ts`
+
+Airspace notices from the FAA NOTAM API.
+
+- **Endpoint**: `https://external-api.faa.gov/notamapi/v1/notams`
+- **Authentication**: `client_id` / `client_secret` headers
+- **Cadence**: 15 minutes
+- **Enabled when**: both `FAA_CLIENT_ID` and `FAA_CLIENT_SECRET` are set

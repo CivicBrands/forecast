@@ -5,7 +5,7 @@
 
 # API Reference
 
-This document specifies the HTTP surface of `forecast-v2`. The surface returns stored material without transformation. It **DOES NOT** resolve uncertainty, adjudicate between sources, or compute derived signals.
+This document specifies the HTTP surface of `forecast-v2`. The surface returns stored material without transformation. It **DOES NOT** resolve uncertainty, adjudicate between sources, or recompute derived signals on demand.
 
 > [!WARNING]
 > Outputs are representations of observed data. They are **NOT** self-validating. See `ETHICS.md` before consuming this surface in safety-relevant contexts.
@@ -24,10 +24,24 @@ This document specifies the HTTP surface of `forecast-v2`. The surface returns s
 
 ## `GET /`
 
-Enumerates available endpoints.
+Enumerates available endpoints. The `snapshots/*` entries reflect the current source registry.
 
 ```json
-{ "endpoints": ["/healthz", "/snapshots/METAR", "/snapshots/AIRNOW", "/collations/latest"] }
+{
+  "endpoints": [
+    "/healthz",
+    "/snapshots/METAR",
+    "/snapshots/AIRNOW",
+    "/snapshots/FIRMS",
+    "/snapshots/HRRR_SMOKE",
+    "/snapshots/NEXRAD",
+    "/snapshots/NLDN",
+    "/snapshots/NOTAM",
+    "/collations/latest",
+    "/latents/latest",
+    "/latents?name="
+  ]
+}
 ```
 
 ---
@@ -40,7 +54,7 @@ Liveness probe. Returns `{ "ok": true }` when the surface is reachable. The endp
 
 ## `GET /snapshots/{SOURCE}`
 
-Returns the most recent stored snapshot for the named source. `{SOURCE}` **MUST** be a value present in `KNOWN_SOURCES` (currently `METAR`, `AIRNOW`).
+Returns the most recent stored snapshot for the named source. `{SOURCE}` **MUST** be a value present in the registry; see `docs/sources.md`.
 
 **`200`**
 
@@ -66,7 +80,7 @@ Returns the most recent stored snapshot for the named source. `{SOURCE}` **MUST*
 
 ## `GET /collations/latest`
 
-Returns the most recent collation row. A collation indexes the most recent snapshot per source whose `fetched_at` falls within `COLLATION_MAX_AGE_MS` of the collation time. Sources outside that window are omitted, **NOT** interpolated.
+Returns the most recent collation row. A collation indexes the most recent snapshot per registered source whose `fetched_at` falls within `COLLATION_MAX_AGE_MS` of the collation time. Sources outside that window are omitted, **NOT** interpolated.
 
 **`200`**
 
@@ -90,6 +104,45 @@ Returns the most recent collation row. A collation indexes the most recent snaps
 
 ---
 
-## Reserved
+## `GET /latents/latest`
 
-The path prefix `/latents/*` is reserved for the latent variables surface introduced in a subsequent phase. Its shape is **NOT** specified by this document.
+Returns every latent row sharing the most recent `ts`. A latent is a derived signal computed from a single collation; the set returned by this endpoint corresponds to one collation event.
+
+**`200`**
+
+```json
+[
+  {
+    "id": 1,
+    "ts": 1717689600000,
+    "name": "aqi_max",
+    "value": 80,
+    "collation_id": 45,
+    "inputs": { "source": "AIRNOW", "samples": 3 }
+  },
+  {
+    "id": 2,
+    "ts": 1717689600000,
+    "name": "smoke_impacted_aq",
+    "value": 120,
+    "collation_id": 45,
+    "inputs": { "pm_aqi_max": 120, "fire_count": 4 },
+    "confidence": 0.4
+  }
+]
+```
+
+**`404`** — `{ "error": "no_latents" }` if no latent has yet been written.
+
+> [!NOTE]
+> A latent is computed only when every source it depends on is present in the underlying collation. The absence of an expected latent **MUST NOT** be interpreted as a value of zero.
+
+---
+
+## `GET /latents?name={NAME}&limit={N}`
+
+Returns the most recent `N` (default `100`) rows for the named latent, ordered by `ts` descending.
+
+**`200`** — JSON array, same row shape as `/latents/latest`.
+
+**`400`** — `{ "error": "name_required" }` if `name` is not provided.

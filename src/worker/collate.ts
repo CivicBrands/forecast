@@ -1,18 +1,17 @@
-import { appendCollation, Collation, latestSnapshot, SourceKey } from "./store";
-
-const ALL_SOURCES: SourceKey[] = ["METAR", "AIRNOW"];
+import { appendCollation, Collation, latestSnapshot } from "./store";
+import { registry } from "../sources/registry";
 
 export async function collate(db: D1Database, maxAgeMs: number, now: number = Date.now()): Promise<Collation | null> {
   const sources: Collation["sources"] = {};
   let observedMin = Infinity;
   let observedMax = -Infinity;
 
-  for (const src of ALL_SOURCES) {
-    const snap = await latestSnapshot(db, src);
+  for (const src of registry) {
+    const snap = await latestSnapshot(db, src.name);
     if (!snap || snap.id === undefined) continue;
     if (now - snap.fetched_at > maxAgeMs) continue;
 
-    sources[src] = {
+    sources[src.name] = {
       snapshot_id: snap.id,
       fetched_at: snap.fetched_at,
       record_count: snap.data.length,
