@@ -27,5 +27,7 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
-      - run: npx tsc --noEmit
+      - run: npm run build
       - run: npm test
+      - name: Build Worker bundle
+        run: npx wrangler deploy --dry-run --outdir=dist-worker
