@@ -1,63 +1,91 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
-const ingest_1 = require("./ingest");
 const store_1 = require("./store");
 const collate_1 = require("./collate");
+const latents_1 = require("./latents");
 const server_1 = require("./server");
 const config_1 = require("./config");
-if (!config_1.config.airnowApiKey) {
-    throw new Error("AIRNOW_API_KEY not set in .env");
-}
-function persistMetar(observations) {
-    const obsTimes = observations.map((o) => o.obsTime);
-    (0, store_1.appendSnapshot)({
-        source: "METAR",
-        fetched_at: Date.now(),
-        observed_at_min: Math.min(...obsTimes),
-        observed_at_max: Math.max(...obsTimes),
-        data: observations,
-    });
-}
-function persistAirNow(observations) {
-    const toEpoch = (o) => {
-        const d = new Date(`${o.DateObserved}T${String(o.HourObserved).padStart(2, "0")}:00:00`);
-        return Math.floor(d.getTime() / 1000);
+const registry_1 = require("./sources/registry");
+const lastFetched = new Map();
+function buildContext() {
+    return {
+        lat: config_1.config.user.lat,
+        lon: config_1.config.user.lon,
+        radiusMiles: config_1.config.user.radiusMiles,
+        env: process.env,
     };
-    const obsTimes = observations.map(toEpoch);
-    (0, store_1.appendSnapshot)({
-        source: "AIRNOW",
-        fetched_at: Date.now(),
-        observed_at_min: Math.min(...obsTimes),
-        observed_at_max: Math.max(...obsTimes),
-        data: observations,
-    });
+}
+async function runSource(src, ctx, now) {
+    const last = lastFetched.get(src.name) ?? 0;
+    if (last !== 0 && now - last < src.cadenceMs)
+        return { kind: "skipped" };
+    if (!src.isEnabled(ctx))
+        return { kind: "disabled" };
+    const data = await src.fetch(ctx);
+    lastFetched.set(src.name, now);
+    if (data.length === 0)
+        return { kind: "empty" };
+    const { min, max } = src.observedAt(data);
+    const snap = {
+        source: src.name,
+        fetched_at: now,
+        observed_at_min: min,
+        observed_at_max: max,
+        data,
+    };
+    (0, store_1.appendSnapshot)(snap);
+    return { kind: "ok", count: data.length };
 }
 async function tick() {
     const started = new Date().toISOString();
     console.log(`[${started}] tick`);
-    const { lat, lon, radiusMiles } = config_1.config.user;
-    const results = await Promise.allSettled([
-        (0, ingest_1.ingestMetar)(lat, lon, radiusMiles).then(persistMetar),
-        (0, ingest_1.ingestAirNow)(lat, lon, radiusMiles, config_1.config.airnowApiKey).then(persistAirNow),
-    ]);
-    const sources = ["METAR", "AIRNOW"];
+    const now = Date.now();
+    const ctx = buildContext();
+    const results = await Promise.allSettled(registry_1.registry.map((src) => runSource(src, ctx, now)));
     results.forEach((r, i) => {
+        const name = registry_1.registry[i].name;
         if (r.status === "rejected") {
-            console.error(`  ${sources[i]} failed:`, r.reason instanceof Error ? r.reason.message : r.reason);
+            const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+            console.error(`  ${name} failed: ${msg}`);
+            return;
         }
-        else {
-            const entry = (0, store_1.latestSnapshot)(sources[i]);
-            console.log(`  ${sources[i]}: ${entry?.data.length ?? 0} records persisted`);
+        switch (r.value.kind) {
+            case "skipped":
+                return;
+            case "disabled":
+                console.log(`  ${name}: disabled (missing env)`);
+                return;
+            case "empty":
+                console.log(`  ${name}: 0 records`);
+                return;
+            case "ok": {
+                const snap = (0, store_1.latestSnapshot)(name);
+                console.log(`  ${name}: ${snap?.data.length ?? r.value.count} records persisted`);
+                return;
+            }
         }
     });
-    const c = (0, collate_1.collate)();
-    if (c) {
-        const srcList = Object.keys(c.sources).join(", ");
-        console.log(`  COLLATED #${c.id}: [${srcList}] window ${c.observed_at_min}–${c.observed_at_max}`);
-    }
-    else {
+    const c = (0, collate_1.collate)(now);
+    if (!c) {
         console.log(`  COLLATED: no fresh sources`);
+        return;
+    }
+    const srcList = Object.keys(c.sources).join(", ");
+    console.log(`  COLLATED #${c.id}: [${srcList}] window ${c.observed_at_min}–${c.observed_at_max}`);
+    const latents = (0, latents_1.deriveLatents)(c, store_1.latestSnapshot);
+    for (const l of latents) {
+        (0, store_1.appendLatent)({
+            ts: now,
+            name: l.name,
+            value: l.value,
+            collation_id: c.id,
+            inputs: l.inputs,
+            confidence: l.confidence,
+        });
+    }
+    if (latents.length > 0) {
+        console.log(`  LATENTS: ${latents.map((l) => `${l.name}=${l.value}`).join(", ")}`);
     }
 }
 async function main() {

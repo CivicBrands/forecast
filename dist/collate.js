@@ -3,18 +3,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.collate = collate;
 const store_1 = require("./store");
 const config_1 = require("./config");
-const ALL_SOURCES = ["METAR", "AIRNOW"];
+const registry_1 = require("./sources/registry");
 function collate(now = Date.now()) {
     const sources = {};
     let observedMin = Infinity;
     let observedMax = -Infinity;
-    for (const src of ALL_SOURCES) {
-        const snap = (0, store_1.latestSnapshot)(src);
+    for (const src of registry_1.registry) {
+        const snap = (0, store_1.latestSnapshot)(src.name);
         if (!snap || snap.id === undefined)
             continue;
         if (now - snap.fetched_at > config_1.config.collationMaxAgeMs)
             continue;
-        sources[src] = {
+        sources[src.name] = {
             snapshot_id: snap.id,
             fetched_at: snap.fetched_at,
             record_count: snap.data.length,

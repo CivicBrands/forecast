@@ -1,4 +1,4 @@
-import { Collation, latestSnapshot } from "./store";
+import type { Collation } from "./store";
 
 export type DerivedLatent = {
   name: string;
@@ -7,7 +7,7 @@ export type DerivedLatent = {
   confidence?: number;
 };
 
-type SnapshotLookup = (source: string) => { data: unknown[] } | null;
+export type SnapshotLookup = (source: string) => { data: unknown[] } | null;
 
 /**
  * Derive cross-source latent signals from a collation.
@@ -15,7 +15,7 @@ type SnapshotLookup = (source: string) => { data: unknown[] } | null;
  * A latent is computed only when every source it depends on is present in the
  * collation. Absence MUST NOT be interpolated.
  */
-export function deriveLatents(c: Collation, lookup: SnapshotLookup = (s) => latestSnapshot(s)): DerivedLatent[] {
+export function deriveLatents(c: Collation, lookup: SnapshotLookup): DerivedLatent[] {
   const out: DerivedLatent[] = [];
   const has = (name: string) => Boolean(c.sources[name]);
 

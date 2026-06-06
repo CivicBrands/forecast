@@ -83,7 +83,7 @@ async function tick() {
   const srcList = Object.keys(c.sources).join(", ");
   console.log(`  COLLATED #${c.id}: [${srcList}] window ${c.observed_at_min}–${c.observed_at_max}`);
 
-  const latents = deriveLatents(c);
+  const latents = deriveLatents(c, latestSnapshot);
   for (const l of latents) {
     appendLatent({
       ts: now,

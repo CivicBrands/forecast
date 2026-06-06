@@ -3,50 +3,56 @@
 > 
 > Authoritative outputs and directives are produced as a time-bound coalescence of these paths, weighted according to their state at that point, and shall be acted upon within that context.
 
-
 # forecast-v2
 
 Time-resolved, multi-source observational field generator.
 
 ## What This Is
 
-An ingestion and validation engine that pulls heterogeneous real-world data streams, preserves atomic observations (pre-aggregation), and maintains temporal and spatial fidelity for downstream latent variable construction.
+`forecast-v2` ingests heterogeneous real-world data streams, validates each upstream shape with Zod, persists append-only snapshots, collates fresh cross-source windows, and writes derived latent signals from those collations.
+
+The system has three runtime surfaces:
+
+- **Node local runtime**: polling tick loop, `better-sqlite3` persistence, and HTTP API.
+- **Cloudflare Worker**: cron-triggered polling, D1 persistence, public HTTP API, and internal NOTAM ingest endpoint.
+- **NOTAM relay**: a separate Node service under `relay/notam/` that holds the FAA SWIM JMS connection and forwards validated NOTAM batches to the Worker.
+
+See `docs/architecture.md`, `docs/api.md`, and `docs/sources.md` for the detailed contracts.
 
 ## Current State
 
-- **METAR** — live aviation weather from aviationweather.gov, geo-resolved via bbox from user coordinates (~6 stations within 30mi of KC)
-- **AirNow** — live air quality (O3, PM2.5, PM10) from airnowapi.org, geo-resolved by lat/lon + radius
-- **STORE** — in-memory per-source store with `fetched_at`, `observed_at_min`, `observed_at_max`, and validated observation arrays
-- **Zod validation** — schemas match real API response shapes, not invented fields
-- **Parallel ingestion** — sources fetched concurrently via `Promise.all`
+- **Polling sources**: METAR, AirNow, FIRMS, HRRR Smoke, NEXRAD, and NLDN through `src/sources/registry.ts`.
+- **Push source**: NOTAM through `POST /ingest/notam`, backed by the SWIM relay.
+- **Storage**: snapshots, collations, and latents stored in SQLite locally and D1 on Cloudflare.
+- **Collation**: latest fresh snapshot per source within `COLLATION_MAX_AGE_MS`; stale sources are omitted, not interpolated.
+- **Latents**: derived signals such as `aqi_max`, `visibility_min_sm`, `fire_detection_count`, and `smoke_impacted_aq`.
+- **Deployment**: Worker `forecast`, D1 database `forecast`, route `forecast.civicbrands.org/*`, cron `*/5 * * * *`.
 
 ## Architecture
 
 ```
-[API Sources]
-     |
-[Fetchers] -----> geo-resolve stations from user lat/lon
-     |
-[Raw Responses]
-     |
-[Zod Validation]
-     |
-[Observation Arrays]
-     |
-[STORE] (D1, per-source append-only)
-     |
-[Collation] (cross-source snapshot index)
-     |
-[Output / API] (Cloudflare Worker — https://forecast.civicbrands.org)
+[Polling APIs]              [FAA SWIM JMS]
+     |                            |
+[Source Registry]          [relay/notam]
+     |                            |
+[Zod Validation]           [POST /ingest/notam]
+     |                            |
+     +-----------> [Snapshot Store] <----------+
+                         |
+                    [Collation]
+                         |
+                     [Latents]
+                         |
+                    [HTTP API]
 ```
 
-## Design Principles
+Core invariants:
 
-1. **Atomic observations** — one observation, one location, one timestamp, no aggregation
-2. **Source fidelity** — preserve upstream field names; no renaming unless required
-3. **Separation of concerns** — ingestion, validation, store, collation, and latent variable layers never collapse into each other
-4. **No early aggregation** — no deduplication, weighting, or summarization at ingestion
-5. **Geo-resolved, not hardcoded** — station/location IDs derived from user coordinates, never hardcoded
+1. Observations are stored atomically.
+2. Upstream field names and response shapes are preserved.
+3. Storage is append-only from application code.
+4. Stale source absence is meaningful and must not be smoothed or substituted.
+5. The public HTTP surface returns stored material; it does not resolve uncertainty.
 
 ## Setup
 
@@ -54,70 +60,131 @@ An ingestion and validation engine that pulls heterogeneous real-world data stre
 npm install
 ```
 
-Create a `.env` file:
+Create a local `.env` file as needed:
 
-```
+```bash
 AIRNOW_API_KEY=your_key_here
+FIRMS_MAP_KEY=optional_key_here
+HRRR_SMOKE_ENDPOINT=optional_url_here
+NEXRAD_STATIONS=optional_station_list
+NLDN_TOKEN=optional_token_here
+NLDN_ENDPOINT=optional_url_here
 ```
 
 AirNow API keys are free: https://docs.airnowapi.org/account/request/
 
-## Build and Run
+Common local configuration:
+
+| Var | Default | Notes |
+|---|---:|---|
+| `USER_LAT` | `39.0997` | User latitude |
+| `USER_LON` | `-94.5786` | User longitude |
+| `RADIUS_MILES` | `30` | Source query radius |
+| `COLLATION_MAX_AGE_MS` | `3600000` | Freshness cutoff for collation |
+| `TICK_MS` | `300000` | Node tick interval |
+| `RUN_ONCE` | unset | `1` runs one tick and exits |
+| `PORT` | `3000` | Node HTTP port |
+| `SERVE` | `1` | `0` skips the Node HTTP server |
+| `DB_PATH` | `./data/forecast.db` | Local SQLite path |
+
+Worker configuration comes from `wrangler.toml` `[vars]` and Wrangler secrets. `INGEST_TOKEN` is required for NOTAM relay ingestion.
+
+## Build, Test, Run
 
 ```bash
 npm run build
-node dist/index.js
+npm test
+npm run dev
+```
+
+Worker commands:
+
+```bash
+npx wrangler dev
+npx wrangler d1 migrations apply forecast
+npx wrangler deploy
+```
+
+Relay commands:
+
+```bash
+cd relay/notam
+npm install
+npm run build
+npm test
 ```
 
 ## Project Structure
 
 ```
 src/
-  index.ts    — entry point, STORE, run cycle
-  ingest.ts   — per-source fetchers + Zod schemas
-.env          — API keys (gitignored)
+  config.ts            Node runtime configuration
+  sources/             Source modules and registry
+  store.ts             better-sqlite3 snapshots, collations, latents
+  collate.ts           Node collation
+  latents.ts           Storage-agnostic latent derivation
+  server.ts            Node HTTP surface
+  index.ts             Node entry: tick loop + optional HTTP server
+  worker/
+    store.ts           D1 snapshots, collations, latents
+    collate.ts         Worker collation
+    index.ts           Worker fetch() + scheduled() entry
+relay/notam/           FAA SWIM JMS relay
+migrations/            D1 schema migrations
+test/                  Node test suite
 ```
+
+## API
+
+Both primary runtimes expose read-only JSON routes:
+
+| Route | Purpose |
+|---|---|
+| `GET /` | List available endpoints |
+| `GET /healthz` | Liveness probe |
+| `GET /snapshots/{SOURCE}` | Latest snapshot for a known source |
+| `GET /collations/latest` | Latest cross-source collation |
+| `GET /latents/latest` | Latest latent rows sharing one timestamp |
+| `GET /latents?name={NAME}&limit={N}` | Recent rows for one latent |
+
+The Worker also exposes the internal relay endpoint:
+
+| Route | Purpose |
+|---|---|
+| `POST /ingest/notam` | Authenticated NOTAM batch ingest from `relay/notam/` |
+
+See `docs/api.md` for response shapes and error semantics.
 
 ## Sources
 
-### Active
-| Source | API | Data |
-|--------|-----|------|
-| METAR | aviationweather.gov | temp, dewpoint, wind, visibility, clouds, flight category |
-| AirNow | airnowapi.org | O3, PM2.5, PM10 AQI by reporting area |
-
-### Planned
-| Source | Data |
-|--------|------|
-| NEXRAD | radar reflectivity, echo tops, storm motion |
-| NLDN | lightning events (subscription required) |
-| HRRR Smoke | surface/column smoke, wind vectors |
-| FIRMS | satellite fire detections |
-| NOTAM | airspace restrictions |
-| Transport | travel time, delay, incidents |
-| Reddit | local subreddit posts |
-| News (RSS) | per-source atomic articles |
-| Socioeconomic | fuel prices, economic indicators |
+| Source | Mode | Data |
+|---|---|---|
+| METAR | Polling | Aviation weather observations |
+| AIRNOW | Polling | Air quality observations |
+| FIRMS | Polling | VIIRS active fire detections |
+| HRRR_SMOKE | Polling | Surface and column smoke via configured JSON endpoint |
+| NEXRAD | Polling | Latest Level-2 radar scan metadata |
+| NLDN | Polling | Subscription-gated lightning detections |
+| NOTAM | Push relay | FAA SWIM FNS NOTAM records |
 
 ## Roadmap
 
 ```
 Phase  0  [done]   Mock pipeline (TypeScript + Zod baseline)
-Phase  1  [done]   Real API fetch (METAR, geo-resolved)
-Phase  2  [done]   Multi-observation arrays (came free with bbox query)
-Phase  3  [done]   STORE (per-source, time-bounded)
-Phase  4  [done]   Multi-source ingestion (METAR + AirNow, parallel)
-Phase  5  [ ]      Cadence model (per-source intervals via setInterval)
-Phase  6  [ ]      Collation (snapshot of STORE at fixed intervals)
-Phase  7  [ ]      Output surface (HTTP endpoint serving snapshots)
-Phase  8  [ ]      Domain + edge (forecast.civicbrands.org via Cloudflare)
-Phase  9  [ ]      Persistence (append snapshots to disk or DB)
-Phase 10  [ ]      Latent variable layer (cross-source derived signals)
+Phase  1  [done]   METAR ingestion
+Phase  2  [done]   Multi-observation arrays
+Phase  3  [done]   Append-only snapshots
+Phase  4  [done]   Multi-source ingestion
+Phase  5  [done]   Node cadence model
+Phase  6  [done]   Collation
+Phase  7  [done]   HTTP output surface
+Phase  8  [done]   Cloudflare Worker + D1 deployment
+Phase  9  [done]   SQLite/D1 persistence
+Phase 10  [done]   Source registry
+Phase 11  [done]   Additional polling sources
+Phase 12  [done]   Latent signal layer
+Phase 13  [done]   NOTAM relay + Worker ingest
+Phase 14  [ ]      Operational hardening and source quality monitoring
 ```
 
-### Constraints
-
-- No new infrastructure before ingestion shape stabilizes
-- No UI before collation exists
-- No external deployment before multi-source ingestion works
-- No schema expansion during structural transitions
+See `ETHICS.md` before consuming outputs in safety-relevant contexts.
