@@ -10,25 +10,37 @@ A time-resolved, multi-source observational field generator. Sources are fetched
 
 ```
 src/
-  config.ts        env-driven config for the Node entry
-  ingest.ts        METAR + AirNow fetchers and Zod schemas (shared with Worker)
-  store.ts         better-sqlite3 store (Node only)
-  collate.ts       cross-source collation (Node)
-  server.ts        Node HTTP server
-  index.ts         Node entry: tick loop + setInterval + HTTP
+  config.ts            env-driven config for the Node entry
+  sources/
+    types.ts           Source interface (name, cadenceMs, schema, isEnabled, fetch, observedAt)
+    registry.ts        the registry of Sources, consumed by both runtimes
+    metar.ts           METAR fetcher + Zod schema
+    airnow.ts          AirNow fetcher + Zod schema
+    firms.ts           NASA FIRMS active-fire detections (env-gated)
+    hrrr_smoke.ts      HRRR Smoke proxy fetcher (env-gated)
+    nexrad.ts          NEXRAD L2 metadata via S3 (env-gated)
+    nldn.ts            NLDN lightning (env-gated, subscription)
+    notam.ts           FAA NOTAM (env-gated)
+  store.ts             better-sqlite3 store (Node only)
+  collate.ts           cross-source collation (Node)
+  latents.ts           derived signals from a collation
+  server.ts            Node HTTP server
+  index.ts             Node entry: tick loop + setInterval + HTTP
   worker/
-    store.ts       D1 store (async mirror of store.ts)
-    collate.ts     D1 collation (async mirror)
-    index.ts       Worker entry: fetch() + scheduled() cron
+    store.ts           D1 store (async mirror of store.ts)
+    collate.ts         D1 collation (async mirror)
+    index.ts           Worker entry: fetch() + scheduled() cron
 migrations/
-  0001_init.sql    snapshots + collations tables
+  0001_init.sql        snapshots + collations tables
+  0002_latents.sql     latents table
 test/
-  collate.test.ts  node:test
-  server.test.ts   node:test
-wrangler.toml      Worker + D1 bindings + 5-min cron + civicbrands route
+  collate.test.ts      node:test
+  server.test.ts       node:test
+  latents.test.ts      node:test
+wrangler.toml          Worker + D1 bindings + 5-min cron + civicbrands route
 ```
 
-Node and Worker share `src/ingest.ts` (pure fetch + Zod), but each has its own store and collate module because better-sqlite3 is sync and D1 is async.
+Sources are shared between Node and Worker via `src/sources/`. The two storage modules differ because `better-sqlite3` is synchronous and D1 is async; the schema and JSON encoding match exactly so migrations are shared.
 
 ## Dev commands
 
@@ -46,11 +58,16 @@ npx wrangler d1 migrations apply forecast   # apply pending migrations
 
 | Var | Used by | Notes |
 |---|---|---|
-| `AIRNOW_API_KEY` | both | required; free key at https://docs.airnowapi.org/account/request/ |
+| `AIRNOW_API_KEY` | both | required to enable AirNow; free key at https://docs.airnowapi.org/account/request/ |
 | `USER_LAT` | both | default 39.0997 (KC) |
 | `USER_LON` | both | default -94.5786 |
 | `RADIUS_MILES` | both | default 30 |
 | `COLLATION_MAX_AGE_MS` | both | default 3_600_000 (snapshot freshness cutoff for collation) |
+| `FIRMS_MAP_KEY` | both | optional; enables FIRMS — https://firms.modaps.eosdis.nasa.gov/api/area/ |
+| `HRRR_SMOKE_ENDPOINT` | both | optional; HTTP proxy returning JSON HRRR-Smoke samples |
+| `NEXRAD_STATIONS` | both | optional; comma-separated station IDs (e.g. `KEAX,KTWX`) |
+| `NLDN_TOKEN`, `NLDN_ENDPOINT` | both | optional; subscription-gated lightning |
+| `FAA_CLIENT_ID`, `FAA_CLIENT_SECRET` | both | optional; enables NOTAM |
 | `TICK_MS` | Node only | default 300_000 (Worker uses cron) |
 | `RUN_ONCE` | Node only | `1` = one tick, then exit |
 | `PORT` | Node only | default 3000 |
@@ -70,11 +87,17 @@ Node env comes from `.env` via dotenv. Worker env comes from `[vars]` in `wrangl
 See `migrations/0001_init.sql`.
 
 - `snapshots(id, source, fetched_at, observed_at_min, observed_at_max, data)` — `data` is JSON of the observation array.
-- `collations(id, collated_at, observed_at_min, observed_at_max, sources)` — `sources` is JSON of `{ [SourceKey]: { snapshot_id, fetched_at, record_count } }`.
+- `collations(id, collated_at, observed_at_min, observed_at_max, sources)` — `sources` is JSON of `{ [SourceName]: { snapshot_id, fetched_at, record_count } }`.
+- `latents(id, ts, name, value, collation_id, inputs, confidence)` — derived signals from a collation; `inputs` is JSON.
 
 ## Tick semantics
 
-One tick = fetch all sources in parallel (`Promise.allSettled`) → append a snapshot per successful source → `collate()` reads the latest snapshot per source, drops any older than `COLLATION_MAX_AGE_MS`, and writes one collation row if at least one fresh source exists.
+One tick = invoke every source in the registry in parallel (`Promise.allSettled`). Each source:
+1. Is skipped if its `cadenceMs` has not elapsed (Node only — the Worker runs all enabled sources every cron firing).
+2. Is skipped if `isEnabled(ctx)` returns false (missing env/credentials).
+3. Fetches, validates against its Zod schema, and appends one row to `snapshots`. An empty observation array is **NOT** persisted.
+
+After ingestion, `collate()` reads the latest snapshot per registered source, drops any older than `COLLATION_MAX_AGE_MS`, and writes one collation row if at least one fresh source exists. `deriveLatents(c)` then produces zero or more `latents` rows from the collation.
 
 ## Roadmap
 
