@@ -52,9 +52,27 @@ A collation is an index across snapshots. It selects the most recent snapshot fo
 
 ---
 
+## NOTAM ingestion topology
+
+NOTAM is the exception to the polling model. The FAA delivers FNS NOTAMs over SWIM JMS — a Solace broker reachable only by long-lived TLS on port 55443, which the Worker **CANNOT** speak. A small out-of-process relay (`relay/notam/`) holds the JMS session, parses the AIXM payload, filters by geo, batches records, and posts them to the Worker:
+
+```
+[ FAA SWIM Solace broker (ems1.swim.faa.gov:55443) ]
+        │ tcps + Solace SMF (guaranteed delivery queue)
+        ▼
+[ Relay: relay/notam/ ]              long-lived systemd unit, home server
+        │ HTTPS POST /ingest/notam, bearer INGEST_TOKEN
+        ▼
+[ Worker: handleNotamIngest ]        validates + appends one snapshot per batch
+        ▼
+[ D1: snapshots(source='NOTAM') ]    indistinguishable from polled sources
+```
+
+The relay is the **only** component in the system that owns long-lived state. Everything else is request- or tick-scoped.
+
 ## Runtimes
 
-Two runtimes share `src/ingest.ts` and the on-disk schema. They differ in storage substrate and trigger.
+Two runtimes share the source modules and the on-disk schema. They differ in storage substrate and trigger.
 
 | Concern | Node (`src/index.ts`) | Worker (`src/worker/index.ts`) |
 |---|---|---|

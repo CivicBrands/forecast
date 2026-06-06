@@ -1,4 +1,4 @@
-export type SourceKey = "METAR" | "AIRNOW";
+export type SourceKey = string;
 
 export type Snapshot<T = unknown> = {
   id?: number;
@@ -14,7 +14,17 @@ export type Collation = {
   collated_at: number;
   observed_at_min: number;
   observed_at_max: number;
-  sources: Partial<Record<SourceKey, { snapshot_id: number; fetched_at: number; record_count: number }>>;
+  sources: Record<string, { snapshot_id: number; fetched_at: number; record_count: number }>;
+};
+
+export type Latent = {
+  id?: number;
+  ts: number;
+  name: string;
+  value: number;
+  collation_id: number;
+  inputs: Record<string, unknown>;
+  confidence?: number;
 };
 
 type SnapshotRow = {
@@ -32,6 +42,16 @@ type CollationRow = {
   observed_at_min: number;
   observed_at_max: number;
   sources: string;
+};
+
+type LatentRow = {
+  id: number;
+  ts: number;
+  name: string;
+  value: number;
+  collation_id: number;
+  inputs: string;
+  confidence: number | null;
 };
 
 export async function appendSnapshot<T>(db: D1Database, snap: Snapshot<T>): Promise<number> {
@@ -77,4 +97,48 @@ export async function latestCollation(db: D1Database): Promise<Collation | null>
     .first<CollationRow>();
   if (!row) return null;
   return { ...row, sources: JSON.parse(row.sources) as Collation["sources"] };
+}
+
+export async function appendLatent(db: D1Database, l: Latent): Promise<number> {
+  const res = await db
+    .prepare(
+      `INSERT INTO latents (ts, name, value, collation_id, inputs, confidence)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+    )
+    .bind(l.ts, l.name, l.value, l.collation_id, JSON.stringify(l.inputs), l.confidence ?? null)
+    .run();
+  return Number(res.meta.last_row_id);
+}
+
+function rowToLatent(row: LatentRow): Latent {
+  return {
+    id: row.id,
+    ts: row.ts,
+    name: row.name,
+    value: row.value,
+    collation_id: row.collation_id,
+    inputs: JSON.parse(row.inputs) as Record<string, unknown>,
+    confidence: row.confidence ?? undefined,
+  };
+}
+
+export async function latestLatents(db: D1Database): Promise<Latent[]> {
+  const res = await db
+    .prepare(
+      `SELECT id, ts, name, value, collation_id, inputs, confidence
+       FROM latents WHERE ts = (SELECT MAX(ts) FROM latents)`,
+    )
+    .all<LatentRow>();
+  return (res.results ?? []).map(rowToLatent);
+}
+
+export async function latentsByName(db: D1Database, name: string, limit = 100): Promise<Latent[]> {
+  const res = await db
+    .prepare(
+      `SELECT id, ts, name, value, collation_id, inputs, confidence
+       FROM latents WHERE name = ?1 ORDER BY ts DESC LIMIT ?2`,
+    )
+    .bind(name, limit)
+    .all<LatentRow>();
+  return (res.results ?? []).map(rowToLatent);
 }

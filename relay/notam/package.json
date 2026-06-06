@@ -1,0 +1,24 @@
+{
+  "name": "forecast-notam-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Subscribes to FAA SWIM FNS NOTAM, parses AIXM, filters by geo, and forwards batches to the Forecast Worker.",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "node --test --require ts-node/register test/*.test.ts"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.7.0",
+    "solclientjs": "^10.17.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

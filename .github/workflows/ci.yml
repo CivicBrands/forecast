@@ -1,0 +1,50 @@
+name: ci
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "test/**"
+      - "migrations/**"
+      - "relay/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "wrangler.toml"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [prime]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Build Worker bundle
+        run: npx wrangler deploy --dry-run --outdir=dist-worker
+
+  relay-notam:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: relay/notam
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: relay/notam/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
