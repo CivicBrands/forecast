@@ -8,7 +8,7 @@ Workers cannot open arbitrary outbound TCP on port 55443, so this relay must run
 
 ```bash
 cd relay/notam
-npm install
+npm ci
 npm run build
 ```
 
