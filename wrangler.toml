@@ -1,0 +1,24 @@
+name = "forecast"
+main = "src/worker/index.ts"
+compatibility_date = "2025-05-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "dcd87bec1efac6b2926f8e162268b446"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "forecast"
+database_id = "f38eae1e-efe7-41d3-980a-aeb73480a76a"
+migrations_dir = "migrations"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+USER_LAT = "39.0997"
+USER_LON = "-94.5786"
+RADIUS_MILES = "30"
+COLLATION_MAX_AGE_MS = "3600000"
+
+[[routes]]
+pattern = "forecast.civicbrands.org/*"
+zone_name = "civicbrands.org"

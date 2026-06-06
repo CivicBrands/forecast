@@ -21,9 +21,11 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260605.1",
     "@types/node": "^20.10.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wrangler": "^4.98.0"
   },
   "types": "./dist/index.d.ts"
 }
