@@ -1,6 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { latentsByName, latestCollation, latestLatents, latestSnapshot } from "./store";
-import { sourceNames } from "./sources/registry";
+import { knownSourceNames } from "./sources/registry";
 
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -34,13 +34,13 @@ function handle(req: IncomingMessage, res: ServerResponse) {
   const snapMatch = url.pathname.match(/^\/snapshots\/([A-Z0-9_]+)$/);
   if (snapMatch) {
     const source = snapMatch[1];
-    if (!sourceNames().includes(source)) return json(res, 404, { error: "unknown_source" });
+    if (!knownSourceNames().includes(source)) return json(res, 404, { error: "unknown_source" });
     const snap = latestSnapshot(source);
     return snap ? json(res, 200, snap) : json(res, 404, { error: "no_snapshot" });
   }
 
   if (url.pathname === "/") {
-    const snapshotRoutes = sourceNames().map((s) => `/snapshots/${s}`);
+    const snapshotRoutes = knownSourceNames().map((s) => `/snapshots/${s}`);
     return json(res, 200, {
       endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
     });

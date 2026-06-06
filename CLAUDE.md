@@ -20,7 +20,7 @@ src/
     hrrr_smoke.ts      HRRR Smoke proxy fetcher (env-gated)
     nexrad.ts          NEXRAD L2 metadata via S3 (env-gated)
     nldn.ts            NLDN lightning (env-gated, subscription)
-    notam.ts           FAA NOTAM (env-gated)
+  notam-schema.ts      Canonical NOTAM Zod schema (shared by Worker + relay)
   store.ts             better-sqlite3 store (Node only)
   collate.ts           cross-source collation (Node)
   latents.ts           derived signals from a collation
@@ -33,6 +33,8 @@ src/
 migrations/
   0001_init.sql        snapshots + collations tables
   0002_latents.sql     latents table
+relay/
+  notam/               out-of-process SWIM JMS consumer (systemd, home server)
 test/
   collate.test.ts      node:test
   server.test.ts       node:test
@@ -67,7 +69,7 @@ npx wrangler d1 migrations apply forecast   # apply pending migrations
 | `HRRR_SMOKE_ENDPOINT` | both | optional; HTTP proxy returning JSON HRRR-Smoke samples |
 | `NEXRAD_STATIONS` | both | optional; comma-separated station IDs (e.g. `KEAX,KTWX`) |
 | `NLDN_TOKEN`, `NLDN_ENDPOINT` | both | optional; subscription-gated lightning |
-| `FAA_CLIENT_ID`, `FAA_CLIENT_SECRET` | both | optional; enables NOTAM |
+| `INGEST_TOKEN` | Worker | bearer token required by `POST /ingest/notam`; must match the relay's `INGEST_TOKEN` |
 | `TICK_MS` | Node only | default 300_000 (Worker uses cron) |
 | `RUN_ONCE` | Node only | `1` = one tick, then exit |
 | `PORT` | Node only | default 3000 |
@@ -89,6 +91,10 @@ See `migrations/0001_init.sql`.
 - `snapshots(id, source, fetched_at, observed_at_min, observed_at_max, data)` — `data` is JSON of the observation array.
 - `collations(id, collated_at, observed_at_min, observed_at_max, sources)` — `sources` is JSON of `{ [SourceName]: { snapshot_id, fetched_at, record_count } }`.
 - `latents(id, ts, name, value, collation_id, inputs, confidence)` — derived signals from a collation; `inputs` is JSON.
+
+## NOTAM ingestion (push, not poll)
+
+NOTAM is the one source that does not live in `src/sources/registry.ts`. The FAA delivers FNS NOTAMs over SWIM JMS (Solace, `tcps://ems1.swim.faa.gov:55443`), which the Worker cannot speak. The relay in `relay/notam/` runs as a long-lived systemd unit on a home box: it consumes the queue, parses the AIXM payload into the canonical shape declared in `src/notam-schema.ts`, geo-filters to `USER_LAT/LON + RADIUS_MILES`, batches records, and POSTs them to the Worker at `/ingest/notam` with a bearer `INGEST_TOKEN`. The Worker validates and writes one `snapshots` row per batch with `source = 'NOTAM'`. Downstream (`/snapshots/NOTAM`, collation, latents) treats NOTAM identically to every other source.
 
 ## Tick semantics
 

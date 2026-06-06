@@ -1,0 +1,30 @@
+[Unit]
+Description=Forecast NOTAM SWIM relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=forecast-relay
+Group=forecast-relay
+WorkingDirectory=/opt/forecast-relay/notam
+EnvironmentFile=/var/lib/forecast-relay/.env
+ExecStart=/usr/bin/node /opt/forecast-relay/notam/dist/index.js
+Restart=on-failure
+RestartSec=10s
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/forecast-relay
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target
