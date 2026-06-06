@@ -15,8 +15,8 @@ npm run build
 ## Deploy (home box, systemd)
 
 ```bash
-# Create the runtime user and directories
-sudo useradd -r -s /usr/sbin/nologin -m -d /var/lib/forecast-relay forecast-relay
+# Create the runtime user and target directory
+sudo useradd -r -s /usr/sbin/nologin forecast-relay
 sudo mkdir -p /opt/forecast-relay/notam
 sudo chown -R forecast-relay:forecast-relay /opt/forecast-relay
 
@@ -27,8 +27,8 @@ sudo cp package.json /opt/forecast-relay/notam/
 
 # Stage the env file (mode 600, owned by the runtime user)
 sudo install -o forecast-relay -g forecast-relay -m 600 \
-  .env.example /var/lib/forecast-relay/.env
-sudo -u forecast-relay $EDITOR /var/lib/forecast-relay/.env
+  .env.example /opt/forecast-relay/.env
+sudo -u forecast-relay $EDITOR /opt/forecast-relay/.env
 
 # Install the service unit
 sudo cp systemd/forecast-notam-relay.service /etc/systemd/system/
