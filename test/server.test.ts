@@ -1,9 +1,10 @@
-import { test } from "node:test";
+import { before, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AddressInfo } from "node:net";
+import { once } from "node:events";
 
 const tmp = mkdtempSync(join(tmpdir(), "forecast-server-"));
 process.env.DB_PATH = join(tmp, "test.db");
@@ -13,8 +14,13 @@ import { appendSnapshot, appendCollation } from "../src/store";
 import { startServer } from "../src/server";
 
 const server = startServer(0);
-const port = (server.address() as AddressInfo).port;
-const base = `http://127.0.0.1:${port}`;
+let base: string;
+
+before(async () => {
+  if (!server.listening) await once(server, "listening");
+  const port = (server.address() as AddressInfo).port;
+  base = `http://127.0.0.1:${port}`;
+});
 
 test("GET /healthz returns ok", async () => {
   const r = await fetch(`${base}/healthz`);
