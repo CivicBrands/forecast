@@ -1,7 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
-import { latestCollation, latestSnapshot, SourceKey } from "./store";
-
-const KNOWN_SOURCES: SourceKey[] = ["METAR", "AIRNOW"];
+import { latentsByName, latestCollation, latestLatents, latestSnapshot } from "./store";
+import { sourceNames } from "./sources/registry";
 
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -20,17 +19,30 @@ function handle(req: IncomingMessage, res: ServerResponse) {
     return c ? json(res, 200, c) : json(res, 404, { error: "no_collation" });
   }
 
-  const snapMatch = url.pathname.match(/^\/snapshots\/([A-Z]+)$/);
+  if (url.pathname === "/latents/latest") {
+    const rows = latestLatents();
+    return rows.length > 0 ? json(res, 200, rows) : json(res, 404, { error: "no_latents" });
+  }
+
+  if (url.pathname === "/latents") {
+    const name = url.searchParams.get("name");
+    if (!name) return json(res, 400, { error: "name_required" });
+    const limit = Number(url.searchParams.get("limit") ?? 100);
+    return json(res, 200, latentsByName(name, limit));
+  }
+
+  const snapMatch = url.pathname.match(/^\/snapshots\/([A-Z0-9_]+)$/);
   if (snapMatch) {
-    const source = snapMatch[1] as SourceKey;
-    if (!KNOWN_SOURCES.includes(source)) return json(res, 404, { error: "unknown_source" });
+    const source = snapMatch[1];
+    if (!sourceNames().includes(source)) return json(res, 404, { error: "unknown_source" });
     const snap = latestSnapshot(source);
     return snap ? json(res, 200, snap) : json(res, 404, { error: "no_snapshot" });
   }
 
   if (url.pathname === "/") {
+    const snapshotRoutes = sourceNames().map((s) => `/snapshots/${s}`);
     return json(res, 200, {
-      endpoints: ["/healthz", "/snapshots/METAR", "/snapshots/AIRNOW", "/collations/latest"],
+      endpoints: ["/healthz", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
     });
   }
 
