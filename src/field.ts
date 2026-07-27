@@ -214,6 +214,8 @@ function summarizeSnapshot(source: string, data: unknown[]): PlainObservation[] 
       return summarizeNexrad(data);
     case "NLDN":
       return summarizeNldn(data);
+    case "EVENTS":
+      return summarizeEvents(data);
     default:
       return [{ source, title: source, summary: `${data.length} record(s) available.` }];
   }
@@ -316,4 +318,32 @@ function summarizeNldn(data: unknown[]): PlainObservation[] {
       severity: data.length > 0 ? "alert" : "ok",
     },
   ];
+}
+
+function summarizeEvents(data: unknown[]): PlainObservation[] {
+  return data.slice(0, 8).map((row) => {
+    const o = row as {
+      provider?: string;
+      name?: string;
+      starts_at?: string;
+      ends_at?: string;
+      venue_name?: string;
+      category?: string;
+      expected_presence?: number;
+      local_rank?: number;
+    };
+    const starts = o.starts_at ? new Date(o.starts_at).toLocaleString() : "unknown time";
+    const presence =
+      typeof o.expected_presence === "number"
+        ? `; expected presence ${Math.round(o.expected_presence)}`
+        : typeof o.local_rank === "number"
+          ? `; local rank ${o.local_rank}`
+          : "";
+    return {
+      source: "EVENTS",
+      title: `${o.name ?? "Event"}${o.venue_name ? ` at ${o.venue_name}` : ""}`,
+      summary: `${o.provider ?? "Event source"} ${o.category ?? "event"} starting ${starts}${presence}.`,
+      severity: typeof o.expected_presence === "number" && o.expected_presence >= 5000 ? "watch" : "ok",
+    };
+  });
 }

@@ -18,6 +18,8 @@ USER_LAT = "39.0997"
 USER_LON = "-94.5786"
 RADIUS_MILES = "30"
 COLLATION_MAX_AGE_MS = "3600000"
+EVENTS_TIMEZONE = "America/Chicago"
+EVENTS_LOOKAHEAD_HOURS = "24"
 
 [[routes]]
 pattern = "forecast.civicbrands.org/*"
@@ -37,4 +39,3 @@ invocation_logs = true
 enabled = false
 persist = true
 head_sampling_rate = 1
-

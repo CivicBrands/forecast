@@ -27,5 +27,11 @@
     "typescript": "^5.9.3",
     "wrangler": "^4.98.0"
   },
-  "types": "./dist/index.d.ts"
+  "types": "./dist/index.d.ts",
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true,
+    "workerd@1.20260722.1": true
+  }
 }

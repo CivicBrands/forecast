@@ -132,6 +132,14 @@
     .empty { color: var(--muted); padding: 1rem; border: 1px dashed var(--line); border-radius: 8px; }
     details.location-details { color: var(--muted); font-size: 0.8rem; }
     details.location-details summary { cursor: pointer; }
+    .privacy-note {
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.5;
+      margin: 0.5rem 0 0;
+      max-width: 70ch;
+    }
+    .privacy-note strong { color: var(--fg, inherit); }
 
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; }
@@ -174,8 +182,18 @@
         </div>
       </div>
       <details class="location-details">
-        <summary>Location details</summary>
+        <summary>Location details &amp; privacy</summary>
         <div id="location-details">Default Kansas City area, 30 mile radius.</div>
+        <p class="privacy-note">
+          <strong>Your location is not stored.</strong> &ldquo;Use my location&rdquo; asks your
+          browser for coordinates and sends them with a single request, only to pick which
+          weather stations, air-quality monitors and parks to read. They are used to build
+          that one response and are then discarded &mdash; not written to the database, not
+          logged, not associated with any identifier, and never shared. Nothing is recorded
+          that could reconstruct where you were. Declining the prompt simply keeps the
+          default Kansas City view, and you can clear it any time with the
+          <em>KC</em> button.
+        </p>
       </details>
 
       <div id="overview" class="grid">

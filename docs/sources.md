@@ -107,6 +107,19 @@ Lightning detections from the National Lightning Detection Network. Subscription
 - **Cadence**: 5 minutes
 - **Enabled when**: both `NLDN_TOKEN` and `NLDN_ENDPOINT` are set
 
+### EVENTS — `src/sources/events.ts`
+
+Local event context. This is a canonical event-context adapter rather than a single upstream-native shape, so each record carries `provider` and `provider_id`. PredictHQ is the first provider; Ticketmaster, KCMO/Socrata, Eventbrite, and other adapters can be added later without changing downstream latent inputs.
+
+- **Endpoint**: `https://api.predicthq.com/v1/events/`
+- **Authentication**: `Bearer PREDICTHQ_API_KEY`
+- **Geographic resolution**: `within={RADIUS_MILES}mi@{USER_LAT},{USER_LON}`
+- **Window**: `EVENTS_LOOKAHEAD_HOURS` from fetch time, default 24
+- **Timezone**: `EVENTS_TIMEZONE`, default `America/Chicago`
+- **Cadence**: 30 minutes
+- **Enabled when**: `PREDICTHQ_API_KEY` is set
+- **Notes**: Event completeness is subscription and provider dependent. Absence of event rows is not proof that no events exist.
+
 ### NOTAM — `relay/notam/` (push)
 
 Airspace notices from the FAA via **SWIM JMS**, not REST. The Worker cannot open the outbound TLS connection (`tcps://ems1.swim.faa.gov:55443`) that the Solace broker requires, so NOTAM ingestion runs out-of-process in `relay/notam/` — a Node systemd unit on a home server.

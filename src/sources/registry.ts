@@ -5,6 +5,7 @@ import { firmsSource } from "./firms";
 import { hrrrSmokeSource } from "./hrrr_smoke";
 import { nexradSource } from "./nexrad";
 import { nldnSource } from "./nldn";
+import { eventsSource } from "./events";
 
 /**
  * NOTAM is intentionally absent: it arrives via SWIM JMS (push) through the
@@ -18,6 +19,7 @@ export const registry: AnySource[] = [
   hrrrSmokeSource,
   nexradSource,
   nldnSource,
+  eventsSource,
 ];
 
 export const NOTAM_SOURCE_NAME = "NOTAM";
