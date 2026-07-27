@@ -27,6 +27,34 @@ test("derives aqi_max when AIRNOW present", () => {
   assert.equal(aqi.value, 80);
 });
 
+test("raises an active NWS extreme heat warning as a fourth-order alert", () => {
+  const now = Date.parse("2026-07-27T16:00:00-05:00");
+  const c = fakeCollation(["NWS_ALERTS"]);
+  c.collated_at = now;
+  const latents = deriveLatents(
+    c,
+    () => ({
+      data: [{
+        id: "urn:example",
+        event: "Extreme Heat Warning",
+        description: "* WHAT...Dangerously hot conditions with heat index values up to 110.",
+        onset: "2026-07-27T14:33:00-05:00",
+        ends: "2026-07-28T07:00:00-05:00",
+        severity: "Severe",
+        urgency: "Expected",
+        certainty: "Likely",
+      }],
+    }),
+    { now },
+  );
+  const heat = latents.find((l) => l.name === "declared_weather_hazard");
+  assert.ok(heat);
+  assert.equal(heat.label, "Extreme Heat Warning");
+  assert.equal(heat.severity, "alert");
+  assert.equal(heat.order, 4);
+  assert.match(heat.summary, /heat index values up to 110/);
+});
+
 test("omits latents whose required sources are missing", () => {
   const c = fakeCollation(["METAR"]);
   const latents = deriveLatents(c, () => null);

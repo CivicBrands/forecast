@@ -79,6 +79,14 @@ test("shade matters less on a mild day than a hot one", () => {
   assert.ok(spread(hot) > spread(mild), "hot days should concentrate crowds more than mild days");
 });
 
+test("an active heat alert suppresses overall park demand", () => {
+  const normal = deriveParkCrowding(FIXTURES, { now: HOT_SAT_PM, temperatureF: 98 });
+  const alert = deriveParkCrowding(FIXTURES, { now: HOT_SAT_PM, temperatureF: 98, heatAlert: true });
+  assert.equal(normal.heatAlert, false);
+  assert.equal(alert.heatAlert, true);
+  assert.ok(alert.demandMult < normal.demandMult);
+});
+
 test("a road closure suppresses an otherwise-top park", () => {
   const clean = deriveParkCrowding(FIXTURES, { now: HOT_SAT_PM, temperatureF: 98 });
   const closed = deriveParkCrowding(FIXTURES, {

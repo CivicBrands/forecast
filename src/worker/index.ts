@@ -22,6 +22,7 @@ import { NOTAM_SOURCE_NAME } from "../sources/registry";
 import { NotamIngestRequestSchema, epochSeconds as notamEpoch } from "../notam-schema";
 import { renderFrontendHtml } from "../frontend";
 import { buildTransientField, KC_DEFAULTS, parseFieldLocation } from "../field";
+import { activeHeatAlert } from "../sources/nws_alerts";
 
 export interface Env {
   DB: D1Database;
@@ -63,7 +64,7 @@ function html(body: string): Response {
 
 function wantsHtml(req: Request): boolean {
   const accept = req.headers.get("accept") ?? "";
-  return accept.includes("text/html") && !accept.includes("application/json");
+  return !accept.includes("application/json");
 }
 
 function endpointIndex() {
@@ -86,7 +87,12 @@ function endpointIndex() {
 
 /** Enrich the latest place_signals with static registry fields for the page. */
 async function buildCrowdcastResponse(env: Env) {
-  const rows = await latestPlaceSignals(env.DB);
+  const [rows, nwsAlerts, metar] = await Promise.all([
+    latestPlaceSignals(env.DB),
+    latestSnapshot(env.DB, "NWS_ALERTS"),
+    latestSnapshot(env.DB, "METAR"),
+  ]);
+  const activeHeat = nwsAlerts ? activeHeatAlert(nwsAlerts.data) : undefined;
   // Must read the RUNTIME registry (measured when available), not the seed —
   // otherwise every measured park renders as a bare slug with no HOLC grade.
   const byId = new Map(loadKcParks().map((p) => [p.id, p]));
@@ -113,6 +119,9 @@ async function buildCrowdcastResponse(env: Env) {
   return {
     generated_at: rows.length > 0 ? rows[0].ts : Date.now(),
     location: "Kansas City area",
+    temperatureF: metar ? hottestTempF(metar.data) : undefined,
+    heatAlert: Boolean(activeHeat),
+    heatAlertEvent: activeHeat?.event,
     calibrated: rows.some((r) => r.foot_traffic !== undefined && r.foot_traffic !== null),
     parks,
   };
@@ -254,8 +263,10 @@ export async function runTick(env: Env): Promise<void> {
   // collation, and persists one place_signals row per park.
   try {
     const metarSnap = await latestSnapshot(env.DB, "METAR");
+    const nwsAlerts = await latestSnapshot(env.DB, "NWS_ALERTS");
     const temperatureF = metarSnap ? hottestTempF(metarSnap.data) : undefined;
-    const cast = deriveParkCrowding(loadKcParks(), { now, temperatureF });
+    const heatAlert = Boolean(nwsAlerts && activeHeatAlert(nwsAlerts.data, now));
+    const cast = deriveParkCrowding(loadKcParks(), { now, temperatureF, heatAlert });
     for (const p of cast.parks) {
       await appendPlaceSignal(env.DB, {
         ts: now,

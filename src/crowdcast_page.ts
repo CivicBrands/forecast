@@ -26,6 +26,10 @@ export function renderCrowdcastHtml(): string {
   .chain{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--dim);white-space:pre-wrap;
     background:#0c1226;border:1px solid var(--line);border-radius:10px;padding:12px;margin:14px 0}
   .meta{color:var(--dim);font-size:13px;margin:8px 2px 18px}
+  .hazard{margin:14px 0;padding:12px 14px;border:1px solid var(--packed);border-left-width:4px;background:#291b2a;color:var(--ink)}
+  .hazard[hidden]{display:none}
+  .network{margin-left:auto;display:flex;gap:12px;font-size:12px}
+  .network a{color:var(--dim);text-underline-offset:3px}
   .grid{display:grid;gap:12px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;
     display:grid;grid-template-columns:54px 1fr auto;gap:14px;align-items:center}
@@ -50,8 +54,10 @@ export function renderCrowdcastHtml(): string {
 <header>
   <h1>KC Park <span class="live">Crowd-Cast</span></h1>
   <span class="tag">where the city actually goes — live forecast, not headcount</span>
+  <nav class="network" aria-label="CivicBrands"><a href="/">Forecast field</a><a href="https://civicbrands.org/">CivicBrands</a></nav>
 </header>
 <p class="lede">On a hot day KC doesn't spread out across its parks — it funnels into the cool, wet, shaded few and abandons the rest. This board is live: it re-reads the field every few minutes, and every park attribute under it is measured, not guessed.</p>
+<div class="hazard" id="hazard" hidden></div>
 <div class="chain">Noise · Redlining · Canopy/Heat · Access barriers  ⟶  where the crowd lands
 demand(day, temp) × ( pull[shade+water+quiet+amenities] − friction[closures] )</div>
 <div class="meta" id="meta">loading the field…</div>
@@ -86,6 +92,7 @@ demand(day, temp) × ( pull[shade+water+quiet+amenities] − friction[closures] 
   }
   function render(data){
     var meta = document.getElementById('meta');
+    var hazard = document.getElementById('hazard');
     var grid = document.getElementById('grid');
     if(!data || !data.parks || data.parks.length===0){
       meta.textContent = 'No forecast written yet — the cron populates this every 5 minutes.';
@@ -93,7 +100,15 @@ demand(day, temp) × ( pull[shade+water+quiet+amenities] − friction[closures] 
       return;
     }
     var when = new Date(data.generated_at).toLocaleString('en-US',{timeZone:'America/Chicago'});
-    meta.textContent = 'as of '+when+' CT'+(data.calibrated?' · calibrated to observed traffic':'')+' · '+data.parks.length+' parks';
+    var temp = (data.temperatureF!==undefined && data.temperatureF!==null) ? ' · hottest station '+Math.round(data.temperatureF)+'°F' : '';
+    meta.textContent = 'as of '+when+' CT'+temp+(data.calibrated?' · calibrated to observed traffic':'')+' · '+data.parks.length+' parks';
+    if(data.heatAlert){
+      hazard.hidden = false;
+      hazard.textContent = (data.heatAlertEvent||'NWS heat alert')+' is active. Overall park demand is adjusted downward while shade and water carry more weight.';
+    }else{
+      hazard.hidden = true;
+      hazard.textContent = '';
+    }
     var parks = data.parks.slice().sort(function(a,b){
       if(a.rank&&b.rank) return a.rank-b.rank;
       return (TIER_ORDER[a.tier]-TIER_ORDER[b.tier]) || (b.crowding-a.crowding);

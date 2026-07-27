@@ -17,7 +17,7 @@ function html(res: ServerResponse, body: string) {
 
 function wantsHtml(req: IncomingMessage): boolean {
   const accept = String(req.headers.accept ?? "");
-  return accept.includes("text/html") && !accept.includes("application/json");
+  return !accept.includes("application/json");
 }
 
 function endpointIndex() {

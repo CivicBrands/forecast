@@ -40,7 +40,25 @@ test("GET / returns dashboard HTML for browsers", async () => {
   const r = await fetch(`${base}/`, { headers: { Accept: "text/html" } });
   assert.equal(r.status, 200);
   assert.match(r.headers.get("content-type") ?? "", /text\/html/);
-  assert.match(await r.text(), /Observational Field/);
+  const body = await r.text();
+  assert.match(body, /What is happening around Kansas City right now\?/);
+  assert.match(body, /href="\/crowdcast"/);
+  assert.match(body, /Open Park Crowd-Cast/);
+  assert.match(body, /relative forecast, not a headcount/);
+  assert.match(body, /Where the readings came from/);
+  assert.match(body, /KC help/);
+  assert.match(body, /Heat warning: get somewhere cooler/);
+  assert.match(body, /civicbrands\.org\/kc\/housing/);
+  assert.match(body, /Choose a Forecast pathway/);
+  assert.match(body, /Raw data access/);
+  assert.match(body, /Provider \/ methodology/);
+});
+
+test("GET / defaults to dashboard HTML when Accept is omitted", async () => {
+  const r = await fetch(`${base}/`);
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type") ?? "", /text\/html/);
+  assert.match(await r.text(), /What is happening around Kansas City right now\?/);
 });
 
 test("GET /field/current rejects invalid location query", async () => {

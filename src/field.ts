@@ -1,6 +1,7 @@
 import { deriveLatents, DerivedLatent } from "./latents";
 import { registry } from "./sources/registry";
 import { AnySource, Snapshot, SourceContext } from "./sources/types";
+import { alertWhat, NwsAlertSchema } from "./sources/nws_alerts";
 
 export type FieldLocationSource = "default" | "query" | "browser";
 
@@ -216,9 +217,32 @@ function summarizeSnapshot(source: string, data: unknown[]): PlainObservation[] 
       return summarizeNldn(data);
     case "EVENTS":
       return summarizeEvents(data);
+    case "NWS_ALERTS":
+      return summarizeNwsAlerts(data);
     default:
       return [{ source, title: source, summary: `${data.length} record(s) available.` }];
   }
+}
+
+function summarizeNwsAlerts(data: unknown[]): PlainObservation[] {
+  return data.flatMap((row) => {
+    const parsed = NwsAlertSchema.safeParse(row);
+    if (!parsed.success) return [];
+    const alert = parsed.data;
+    return [{
+      source: "NWS_ALERTS",
+      title: alert.event,
+      summary: alertWhat(alert),
+      severity: /warning/i.test(alert.event) ? "alert" as const : "watch" as const,
+      details: {
+        headline: alert.headline,
+        sender: alert.senderName,
+        onset: alert.onset,
+        ends: alert.ends ?? alert.expires,
+        instruction: alert.instruction,
+      },
+    }];
+  });
 }
 
 function summarizeMetar(data: unknown[]): PlainObservation[] {

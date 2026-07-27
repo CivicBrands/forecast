@@ -73,6 +73,7 @@ export type CrowdCast = {
   generated_at: number;
   location: string;
   temperatureF: number;
+  heatAlert: boolean;
   heatMode: number; // 0..1
   demandMult: number;
   calibrated: boolean;
@@ -301,6 +302,7 @@ export function deriveParkCrowding(places: Place[], ctx: ParkCrowdContext): Crow
     generated_at: ctx.now,
     location: "Kansas City area",
     temperatureF,
+    heatAlert: Boolean(ctx.heatAlert),
     heatMode: round1(heat),
     demandMult: round1(demandMult),
     calibrated,

@@ -1,4 +1,5 @@
 import type { Collation } from "./store";
+import { activeHeatAlert, alertWhat, NwsAlertSchema } from "./sources/nws_alerts";
 
 export type DerivedLatent = {
   name: string;
@@ -8,7 +9,7 @@ export type DerivedLatent = {
   summary: string;
   severity: "ok" | "watch" | "alert";
   order: 1 | 2 | 3 | 4;
-  family: "air" | "visibility" | "fire" | "smoke" | "storm" | "operations" | "mobility" | "civic" | "field";
+  family: "air" | "visibility" | "fire" | "smoke" | "storm" | "weather" | "operations" | "mobility" | "civic" | "field";
   inputs: Record<string, unknown>;
   confidence?: number;
 };
@@ -60,6 +61,41 @@ export function deriveLatents(c: Collation, lookup: SnapshotLookup, context: Lat
     },
     confidence: placeContext.activeEvents.length > 0 ? 0.85 : 0.65,
   });
+
+  if (has("NWS_ALERTS")) {
+    const snap = lookup("NWS_ALERTS");
+    const parsed = (snap?.data ?? [])
+      .map((row) => NwsAlertSchema.safeParse(row))
+      .filter((result) => result.success)
+      .map((result) => result.data);
+    const heat = activeHeatAlert(parsed, placeContext.now);
+    const alert = heat ?? parsed[0];
+    if (alert) {
+      const warning = /warning/i.test(alert.event);
+      const watch = /watch/i.test(alert.event);
+      out.push({
+        name: "declared_weather_hazard",
+        label: alert.event,
+        value: warning ? 100 : watch ? 80 : 65,
+        unit: "hazard index",
+        summary: alertWhat(alert),
+        severity: warning ? "alert" : "watch",
+        order: 4,
+        family: "weather",
+        inputs: {
+          source: "NWS_ALERTS",
+          alert_id: alert.id,
+          event: alert.event,
+          severity: alert.severity,
+          urgency: alert.urgency,
+          certainty: alert.certainty,
+          onset: alert.onset,
+          ends: alert.ends ?? alert.expires,
+        },
+        confidence: /observed/i.test(alert.certainty ?? "") ? 1 : /likely/i.test(alert.certainty ?? "") ? 0.95 : 0.85,
+      });
+    }
+  }
 
   if (has("AIRNOW")) {
     const snap = lookup("AIRNOW");

@@ -8,6 +8,7 @@ import { startServer } from "./server";
 import { config } from "./config";
 import { registry } from "./sources/registry";
 import { AnySource, SourceContext } from "./sources/types";
+import { activeHeatAlert } from "./sources/nws_alerts";
 
 const lastFetched = new Map<string, number>();
 
@@ -104,8 +105,10 @@ async function tick() {
   // the live field (temperature from METAR). Persisted as place_signals, one row
   // per park. Runs whenever the registry is loaded; independent of source count.
   const metar = latestSnapshot("METAR");
+  const nwsAlerts = latestSnapshot("NWS_ALERTS");
   const temperatureF = metar ? hottestTempF(metar.data) : undefined;
-  const cast = deriveParkCrowding(loadKcParks(), { now, temperatureF });
+  const heatAlert = Boolean(nwsAlerts && activeHeatAlert(nwsAlerts.data, now));
+  const cast = deriveParkCrowding(loadKcParks(), { now, temperatureF, heatAlert });
   for (const p of cast.parks) {
     appendPlaceSignal({
       ts: now,
