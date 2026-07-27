@@ -7,13 +7,13 @@ async function collate(db, maxAgeMs, now = Date.now()) {
     const sources = {};
     let observedMin = Infinity;
     let observedMax = -Infinity;
-    for (const src of registry_1.registry) {
-        const snap = await (0, store_1.latestSnapshot)(db, src.name);
+    for (const sourceName of (0, registry_1.knownSourceNames)()) {
+        const snap = await (0, store_1.latestSnapshot)(db, sourceName);
         if (!snap || snap.id === undefined)
             continue;
         if (now - snap.fetched_at > maxAgeMs)
             continue;
-        sources[src.name] = {
+        sources[sourceName] = {
             snapshot_id: snap.id,
             fetched_at: snap.fetched_at,
             record_count: snap.data.length,

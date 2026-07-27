@@ -10,6 +10,7 @@ const firms_1 = require("./firms");
 const hrrr_smoke_1 = require("./hrrr_smoke");
 const nexrad_1 = require("./nexrad");
 const nldn_1 = require("./nldn");
+const events_1 = require("./events");
 /**
  * NOTAM is intentionally absent: it arrives via SWIM JMS (push) through the
  * out-of-process relay in `relay/notam/`, not by polling. The Worker still
@@ -22,6 +23,7 @@ exports.registry = [
     hrrr_smoke_1.hrrrSmokeSource,
     nexrad_1.nexradSource,
     nldn_1.nldnSource,
+    events_1.eventsSource,
 ];
 exports.NOTAM_SOURCE_NAME = "NOTAM";
 function sourceNames() {

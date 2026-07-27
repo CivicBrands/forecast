@@ -35,8 +35,8 @@ export declare const NotamRecordSchema: z.ZodObject<{
     type: string;
     id: string;
     location: string;
-    fns_uuid: string;
     year: string;
+    fns_uuid: string;
     interpretation: string;
     issued: string;
     effective_start: string;
@@ -61,8 +61,8 @@ export declare const NotamRecordSchema: z.ZodObject<{
     type: string;
     id: string;
     location: string;
-    fns_uuid: string;
     year: string;
+    fns_uuid: string;
     interpretation: string;
     issued: string;
     effective_start: string;
@@ -116,8 +116,8 @@ export declare const NotamIngestRequestSchema: z.ZodObject<{
         type: string;
         id: string;
         location: string;
-        fns_uuid: string;
         year: string;
+        fns_uuid: string;
         interpretation: string;
         issued: string;
         effective_start: string;
@@ -142,8 +142,8 @@ export declare const NotamIngestRequestSchema: z.ZodObject<{
         type: string;
         id: string;
         location: string;
-        fns_uuid: string;
         year: string;
+        fns_uuid: string;
         interpretation: string;
         issued: string;
         effective_start: string;
@@ -170,8 +170,8 @@ export declare const NotamIngestRequestSchema: z.ZodObject<{
         type: string;
         id: string;
         location: string;
-        fns_uuid: string;
         year: string;
+        fns_uuid: string;
         interpretation: string;
         issued: string;
         effective_start: string;
@@ -198,8 +198,8 @@ export declare const NotamIngestRequestSchema: z.ZodObject<{
         type: string;
         id: string;
         location: string;
-        fns_uuid: string;
         year: string;
+        fns_uuid: string;
         interpretation: string;
         issued: string;
         effective_start: string;

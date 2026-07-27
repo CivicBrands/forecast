@@ -100,6 +100,7 @@ function renderFrontendHtml() {
     .metric .value { font-size: 1.65rem; line-height: 1; font-weight: 650; }
     .metric .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; }
     .source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr)); gap: 0.75rem; }
+    .latent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr)); gap: 0.75rem; }
     .source-card {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -109,10 +110,29 @@ function renderFrontendHtml() {
       display: grid;
       gap: 0.5rem;
     }
+    .latent-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      padding: 0.9rem;
+      display: grid;
+      gap: 0.65rem;
+      min-width: 0;
+    }
+    .latent-card.alert { border-color: color-mix(in srgb, var(--bad) 55%, var(--line)); }
+    .latent-card.watch { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+    .latent-top { display: flex; justify-content: space-between; align-items: start; gap: 0.75rem; }
+    .latent-title { display: grid; gap: 0.15rem; min-width: 0; }
+    .latent-title strong { font-size: 0.95rem; }
+    .latent-title span { color: var(--muted); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.07em; }
+    .latent-value { font-size: 1.7rem; line-height: 1; font-weight: 700; white-space: nowrap; }
+    .latent-summary { color: var(--ink); }
+    .latent-meta { display: flex; gap: 0.4rem; flex-wrap: wrap; }
     .source-title { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
     .source-title strong { font-size: 0.9rem; }
     .pill { border: 1px solid var(--line); border-radius: 999px; padding: 0.12rem 0.45rem; color: var(--muted); font-size: 0.72rem; }
     .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+    .pill.watch { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
     .pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
     .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.3rem 0.7rem; color: var(--muted); font-size: 0.82rem; }
     .kv b { color: var(--ink); font-weight: 550; overflow-wrap: anywhere; }
@@ -206,21 +226,20 @@ function renderFrontendHtml() {
         <div class="section-body"><div id="sources-grid" class="source-grid"></div></div>
       </section>
 
+      <section id="latents" class="span-12">
+        <div class="section-head"><h3>Latent Field</h3><span id="latent-status" class="pill">-</span></div>
+        <div class="section-body" id="latents-body"></div>
+      </section>
+
       <section id="observed" class="span-12">
         <div class="section-head"><h3>Observed Info</h3><span id="observed-count" class="pill">-</span></div>
         <div class="section-body" id="observed-body"></div>
       </section>
 
-      <div class="grid">
-        <section class="span-7">
-          <div class="section-head"><h3>Latest Collation</h3><span id="collation-id" class="pill">-</span></div>
-          <div class="section-body" id="collation-body"></div>
-        </section>
-        <section id="latents" class="span-5">
-          <div class="section-head"><h3>Latest Latents</h3><span id="latent-status" class="pill">-</span></div>
-          <div class="section-body" id="latents-body"></div>
-        </section>
-      </div>
+      <section class="span-12">
+        <div class="section-head"><h3>Latest Collation</h3><span id="collation-id" class="pill">-</span></div>
+        <div class="section-body" id="collation-body"></div>
+      </section>
 
       <section id="raw" class="span-12">
         <div class="section-head"><h3>Raw Payload</h3><span id="raw-label" class="pill">collation</span></div>
@@ -256,6 +275,7 @@ function renderFrontendHtml() {
     const fmtCount = (n) => Number.isFinite(n) ? String(n) : "-";
     const fmtDateMs = (n) => Number.isFinite(n) ? new Date(n).toLocaleString() : "-";
     const fmtDateSec = (n) => Number.isFinite(n) ? new Date(n * 1000).toLocaleString() : "-";
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const fmtSpan = (min, max) => {
       if (!Number.isFinite(min) || !Number.isFinite(max)) return "-";
       const minutes = Math.max(0, Math.round((max - min) / 60));
@@ -326,9 +346,12 @@ function renderFrontendHtml() {
       el("metric-records").textContent = fmtCount(recordCount);
       el("metric-latents").textContent = fmtCount(state.latents.length);
       el("metric-window").textContent = state.collation ? fmtSpan(state.collation.observed_at_min, state.collation.observed_at_max) : "-";
-      el("summary").textContent = state.collation
-        ? "Collated " + collationSources.length + " source(s) at " + fmtDateMs(state.collation.collated_at) + "."
-        : "No current collation is available.";
+      const lead = leadLatent();
+      el("summary").textContent = lead
+        ? lead.label + ": " + lead.summary
+        : state.collation
+          ? "Collated " + collationSources.length + " source(s) at " + fmtDateMs(state.collation.collated_at) + "."
+          : "No current collation is available.";
       el("source-count").textContent = sources.length + " known";
       el("collation-id").textContent = state.collation && state.collation.id ? "#" + state.collation.id : "-";
       el("latent-status").textContent = state.latents.length ? state.latents.length + " rows" : "empty";
@@ -421,9 +444,34 @@ function renderFrontendHtml() {
         body.innerHTML = \`<div class="empty">\${err ? err.message : "No latents"}</div>\`;
         return;
       }
-      body.innerHTML = \`<table><thead><tr><th>Name</th><th>Value</th><th>Confidence</th></tr></thead><tbody>\${state.latents.map((l) =>
-        \`<tr><td>\${l.name}</td><td>\${l.value}</td><td>\${l.confidence ?? "-"}</td></tr>\`
-      ).join("")}</tbody></table>\`;
+      const sorted = [...state.latents].sort((a, b) => (b.order || 1) - (a.order || 1) || severityRank(b) - severityRank(a) || b.value - a.value);
+      body.innerHTML = \`<div class="latent-grid">\${sorted.map((l) => {
+        const severity = l.severity || "ok";
+        const pillClass = severity === "alert" ? "bad" : severity === "watch" ? "watch" : "ok";
+        const confidence = typeof l.confidence === "number" ? Math.round(l.confidence * 100) + "% confidence" : "direct reading";
+        const unit = l.unit ? " " + esc(l.unit) : "";
+        return \`<article class="latent-card \${esc(severity)}">
+          <div class="latent-top">
+            <div class="latent-title"><strong>\${esc(l.label || l.name)}</strong><span>\${esc(l.family || "field")} · order \${esc(l.order || 1)}</span></div>
+            <div class="latent-value">\${esc(l.value)}\${unit}</div>
+          </div>
+          <div class="latent-summary">\${esc(l.summary || l.name)}</div>
+          <div class="latent-meta">
+            <span class="pill \${pillClass}">\${esc(severity)}</span>
+            <span class="pill">\${esc(confidence)}</span>
+            <span class="pill">\${esc(l.name)}</span>
+          </div>
+        </article>\`;
+      }).join("")}</div>\`;
+    }
+
+    function leadLatent() {
+      if (!state.latents.length) return null;
+      return [...state.latents].sort((a, b) => (b.order || 1) - (a.order || 1) || severityRank(b) - severityRank(a) || b.value - a.value)[0];
+    }
+
+    function severityRank(l) {
+      return l.severity === "alert" ? 2 : l.severity === "watch" ? 1 : 0;
     }
 
     el("refresh").addEventListener("click", () => load().catch(showFatal));

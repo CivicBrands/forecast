@@ -10,6 +10,11 @@ export interface Env {
     NEXRAD_STATIONS?: string;
     NLDN_TOKEN?: string;
     NLDN_ENDPOINT?: string;
+    PREDICTHQ_API_KEY?: string;
+    PREDICTHQ_CATEGORIES?: string;
+    PREDICTHQ_LIMIT?: string;
+    EVENTS_LOOKAHEAD_HOURS?: string;
+    EVENTS_TIMEZONE?: string;
     /** Bearer token presented by the NOTAM SWIM relay on POST /ingest/notam. */
     INGEST_TOKEN?: string;
 }
