@@ -1,5 +1,6 @@
 name = "forecast"
 main = "src/worker/index.ts"
+# Production releases enter through the local deployment gate, then Workers Builds.
 compatibility_date = "2025-05-01"
 compatibility_flags = ["nodejs_compat"]
 account_id = "dcd87bec1efac6b2926f8e162268b446"

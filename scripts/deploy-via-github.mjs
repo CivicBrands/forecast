@@ -4,6 +4,7 @@ const GITHUB_REPOSITORY = "CivicBrands/forecast";
 const WORKER_CHECK_NAME = "Workers Builds: forecast";
 const WORKER_HEALTH_URL = "https://forecast.civicbrands.org/healthz";
 const DEPLOY_TIMEOUT_MS = 10 * 60 * 1000;
+const CHECK_APPEAR_TIMEOUT_MS = 2 * 60 * 1000;
 const POLL_INTERVAL_MS = 15 * 1000;
 
 function run(command, args, options = {}) {
@@ -50,6 +51,7 @@ async function workerCheck(commit) {
 }
 
 async function waitForWorkerDeployment(commit) {
+  const startedAt = Date.now();
   const deadline = Date.now() + DEPLOY_TIMEOUT_MS;
   let previousState = "";
 
@@ -72,6 +74,13 @@ async function waitForWorkerDeployment(commit) {
         process.exit(1);
       }
       return check;
+    }
+
+    if (!check && Date.now() - startedAt >= CHECK_APPEAR_TIMEOUT_MS) {
+      console.error(
+        "Cloudflare created no Worker build check within 2 minutes. The pushed commit may not match the configured build-watch paths.",
+      );
+      process.exit(1);
     }
 
     await wait(POLL_INTERVAL_MS);
