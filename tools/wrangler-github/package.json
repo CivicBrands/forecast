@@ -2,7 +2,7 @@
   "name": "wrangler",
   "version": "4.114.0-civicbrands.1",
   "private": true,
-  "description": "CivicBrands deployment gate: validate locally, publish Git, deploy through GitHub Actions",
+  "description": "CivicBrands deployment gate: validate locally, deploy directly to Cloudflare, save state to GitHub",
   "bin": {
     "cf-wrangler": "./bin/wrangler.js",
     "wrangler": "./bin/wrangler.js",

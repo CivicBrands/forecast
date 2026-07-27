@@ -121,15 +121,13 @@ npx wrangler deploy
 ```
 
 `npx wrangler deploy` is the production release gate for this repository. It
-does not deploy from the local machine. It requires a clean `prime` checkout,
-builds and tests the root application and NOTAM relay, creates a dry-run Worker
-bundle, and pushes `prime`. Cloudflare Workers Builds consumes that GitHub push
-and runs the same command with `WORKERS_CI=1`, which invokes upstream Wrangler
-inside Cloudflare and deploys the pushed commit. The local command waits for
-that Cloudflare check to succeed and verifies the live health endpoint before
-returning success. It rejects a no-op deployment because GitHub would emit no
-push event. Direct Wrangler commands such as `dev`, `tail`, and
-`deploy --dry-run` continue to pass through locally.
+requires a clean `prime` checkout, builds and tests the root application and
+NOTAM relay, creates a dry-run Worker bundle, and confirms that the local commit
+descends from the shared `origin/prime` base. It then deploys that exact local
+commit directly to Cloudflare, verifies the live health endpoint, and pushes the
+deployed commit to GitHub as the durable state-save and cross-computer base.
+GitHub is not a deployment relay. Direct Wrangler commands such as `dev`,
+`tail`, and `deploy --dry-run` continue to pass through locally.
 
 Relay commands:
 

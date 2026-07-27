@@ -14,7 +14,6 @@ const directWrangler = path.join(
 );
 
 if (
-  process.env.WORKERS_CI === "1" ||
   args[0] !== "deploy" ||
   args.includes("--dry-run")
 ) {
@@ -27,13 +26,13 @@ if (
 
 if (args.length !== 1) {
   console.error(
-    "Production deployment is GitHub-controlled and accepts no local Wrangler flags.",
+    "Production deployment is locally gated and accepts no additional Wrangler flags.",
   );
   console.error("Use `npx wrangler deploy` from the repository root.");
   process.exit(2);
 }
 
-const deployScript = path.join(root, "scripts", "deploy-via-github.mjs");
+const deployScript = path.join(root, "scripts", "deploy-direct.mjs");
 const result = spawnSync(process.execPath, [deployScript], {
   cwd: root,
   stdio: "inherit",
