@@ -125,8 +125,11 @@ does not deploy from the local machine. It requires a clean `prime` checkout,
 builds and tests the root application and NOTAM relay, creates a dry-run Worker
 bundle, and pushes `prime`. Cloudflare Workers Builds consumes that GitHub push
 and runs the same command with `WORKERS_CI=1`, which invokes upstream Wrangler
-inside Cloudflare and deploys the pushed commit. Direct Wrangler commands such
-as `dev`, `tail`, and `deploy --dry-run` continue to pass through locally.
+inside Cloudflare and deploys the pushed commit. The local command waits for
+that Cloudflare check to succeed and verifies the live health endpoint before
+returning success. It rejects a no-op deployment because GitHub would emit no
+push event. Direct Wrangler commands such as `dev`, `tail`, and
+`deploy --dry-run` continue to pass through locally.
 
 Relay commands:
 
