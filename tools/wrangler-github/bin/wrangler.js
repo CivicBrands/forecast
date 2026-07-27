@@ -13,7 +13,11 @@ const directWrangler = path.join(
   "wrangler.js",
 );
 
-if (args[0] !== "deploy" || args.includes("--dry-run")) {
+if (
+  process.env.WORKERS_CI === "1" ||
+  args[0] !== "deploy" ||
+  args.includes("--dry-run")
+) {
   const result = spawnSync(process.execPath, [directWrangler, ...args], {
     cwd: process.cwd(),
     stdio: "inherit",

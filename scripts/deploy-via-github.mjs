@@ -58,15 +58,6 @@ console.log("Publishing prime...");
 run("git", ["push", "origin", "prime"]);
 
 const commit = read("git", ["rev-parse", "--short=12", "HEAD"]);
-const stamp = new Date()
-  .toISOString()
-  .replaceAll("-", "")
-  .replaceAll(":", "")
-  .replace(/\.\d{3}Z$/, "Z");
-const tag = `deploy/${stamp}-${commit}`;
-
-console.log(`Triggering GitHub deployment with ${tag}...`);
-run("git", ["tag", tag, "HEAD"]);
-run("git", ["push", "origin", `refs/tags/${tag}`]);
-
-console.log(`GitHub now owns deployment of ${commit}.`);
+console.log(
+  `Cloudflare Workers Builds now owns deployment of ${commit} from GitHub prime.`,
+);
