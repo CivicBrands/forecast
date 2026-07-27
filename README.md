@@ -21,7 +21,7 @@ See `docs/architecture.md`, `docs/api.md`, and `docs/sources.md` for the detaile
 
 ## Current State
 
-- **Polling sources**: METAR, AirNow, FIRMS, HRRR Smoke, NEXRAD, and NLDN through `src/sources/registry.ts`.
+- **Polling sources**: METAR, AirNow, FIRMS, HRRR Smoke, NEXRAD, NLDN, and EVENTS through `src/sources/registry.ts`.
 - **Push source**: NOTAM through `POST /ingest/notam`, backed by the SWIM relay.
 - **Storage**: snapshots, collations, and latents stored in SQLite locally and D1 on Cloudflare.
 - **Collation**: latest fresh snapshot per source within `COLLATION_MAX_AGE_MS`; stale sources are omitted, not interpolated.
@@ -69,6 +69,7 @@ HRRR_SMOKE_ENDPOINT=optional_url_here
 NEXRAD_STATIONS=optional_station_list
 NLDN_TOKEN=optional_token_here
 NLDN_ENDPOINT=optional_url_here
+PREDICTHQ_API_KEY=optional_key_here
 ```
 
 AirNow API keys are free: https://docs.airnowapi.org/account/request/
@@ -81,11 +82,25 @@ Common local configuration:
 | `USER_LON` | `-94.5786` | User longitude |
 | `RADIUS_MILES` | `30` | Source query radius |
 | `COLLATION_MAX_AGE_MS` | `3600000` | Freshness cutoff for collation |
+| `EVENTS_TIMEZONE` | `America/Chicago` | Local timezone for event date filtering |
+| `EVENTS_LOOKAHEAD_HOURS` | `24` | Event search window from fetch time |
 | `TICK_MS` | `300000` | Node tick interval |
 | `RUN_ONCE` | unset | `1` runs one tick and exits |
 | `PORT` | `3000` | Node HTTP port |
 | `SERVE` | `1` | `0` skips the Node HTTP server |
 | `DB_PATH` | `./data/forecast.db` | Local SQLite path |
+
+Additional optional source credentials:
+
+| Var | Notes |
+|---|---|
+| `FIRMS_MAP_KEY` | Enables NASA FIRMS |
+| `HRRR_SMOKE_ENDPOINT` | Enables HRRR Smoke proxy |
+| `NEXRAD_STATIONS` | Enables NEXRAD metadata, comma-separated station IDs |
+| `NLDN_TOKEN`, `NLDN_ENDPOINT` | Enable NLDN lightning |
+| `PREDICTHQ_API_KEY` | Enables EVENTS via PredictHQ |
+| `PREDICTHQ_CATEGORIES` | Optional comma-separated category override |
+| `PREDICTHQ_LIMIT` | Optional event result limit, default 50 |
 
 Worker configuration comes from `wrangler.toml` `[vars]` and Wrangler secrets. `INGEST_TOKEN` is required for NOTAM relay ingestion.
 
@@ -146,6 +161,15 @@ Both primary runtimes expose read-only JSON routes:
 | `GET /collations/latest` | Latest cross-source collation |
 | `GET /latents/latest` | Latest latent rows sharing one timestamp |
 | `GET /latents?name={NAME}&limit={N}` | Recent rows for one latent |
+| `GET /crowdcast` | Live KC Park Crowd-Cast board (HTML) |
+| `GET /crowdcast.json` | Ranked park crowding for the latest tick |
+| `GET /crowdcast/history?place={ID}` | Hourly rollup history for one place |
+| `GET /nearby.json?lat={LAT}&lon={LON}` | Parks ranked by distance, crowding and coolness |
+
+> **Location privacy.** `GET /field/current` and `GET /nearby.json` accept coordinates and
+> use them solely to build that single response — selecting which stations, monitors and
+> parks to read. Coordinates are **never** written to the database, never logged, never
+> attached to an identifier, and never shared. No row is written on either path.
 
 The Worker also exposes the internal relay endpoint:
 
@@ -165,6 +189,7 @@ See `docs/api.md` for response shapes and error semantics.
 | HRRR_SMOKE | Polling | Surface and column smoke via configured JSON endpoint |
 | NEXRAD | Polling | Latest Level-2 radar scan metadata |
 | NLDN | Polling | Subscription-gated lightning detections |
+| EVENTS | Polling | Local event context, initially via PredictHQ |
 | NOTAM | Push relay | FAA SWIM FNS NOTAM records |
 
 ## Roadmap

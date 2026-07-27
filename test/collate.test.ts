@@ -64,4 +64,19 @@ test("skips snapshots older than COLLATION_MAX_AGE_MS", () => {
   assert.equal(c.sources.AIRNOW, undefined);
 });
 
+test("collates push-only NOTAM snapshots", () => {
+  const now = 3_000_000;
+  appendSnapshot({
+    source: "NOTAM",
+    fetched_at: now - 5_000,
+    observed_at_min: 100,
+    observed_at_max: 200,
+    data: [{ text: "AIRSPACE RESTRICTED", effective_start: "2026-06-08T12:00:00Z" }],
+  });
+
+  const c = collate(now);
+  assert.ok(c);
+  assert.equal(c.sources.NOTAM?.record_count, 1);
+});
+
 test.after(() => rmSync(tmp, { recursive: true, force: true }));

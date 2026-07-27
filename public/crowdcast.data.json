@@ -1,0 +1,7 @@
+{
+  "_retired": true,
+  "_reason": "Frozen seed-estimate fixture from the static prototype. Its narratives contained a claim we have since retracted ('east of Troost' / 'never planted'). Superseded by the live endpoint.",
+  "_live_endpoint": "https://forecast.civicbrands.org/crowdcast.json",
+  "_correction": "docs/compendium/parks.md",
+  "parks": []
+}

@@ -1,8 +1,23 @@
-import { appendLatent, appendSnapshot, latentsByName, latestCollation, latestLatents, latestSnapshot, Snapshot } from "./store";
+import {
+  appendLatent,
+  appendPlaceSignal,
+  appendSnapshot,
+  latentsByName,
+  latestCollation,
+  latestLatents,
+  latestPlaceSignals,
+  latestSnapshot,
+  maintainPlaceSignals,
+  placeSignalHistory,
+  Snapshot,
+} from "./store";
 import { collate } from "./collate";
 import { knownSourceNames, registry, sourceNames } from "../sources/registry";
 import { AnySource, SourceContext } from "../sources/types";
 import { deriveLatents } from "../latents";
+import { deriveParkCrowding, hottestTempF, tierOf } from "../parks";
+import { loadKcParks } from "../places";
+import { renderCrowdcastHtml } from "../crowdcast_page";
 import { NOTAM_SOURCE_NAME } from "../sources/registry";
 import { NotamIngestRequestSchema, epochSeconds as notamEpoch } from "../notam-schema";
 import { renderFrontendHtml } from "../frontend";
@@ -20,20 +35,29 @@ export interface Env {
   NEXRAD_STATIONS?: string;
   NLDN_TOKEN?: string;
   NLDN_ENDPOINT?: string;
+  PREDICTHQ_API_KEY?: string;
+  PREDICTHQ_CATEGORIES?: string;
+  PREDICTHQ_LIMIT?: string;
+  EVENTS_LOOKAHEAD_HOURS?: string;
+  EVENTS_TIMEZONE?: string;
   /** Bearer token presented by the NOTAM SWIM relay on POST /ingest/notam. */
   INGEST_TOKEN?: string;
+  /** Days of raw place_signals to keep. Unset/0 = never prune (rollup only). */
+  PLACE_SIGNALS_RETENTION_DAYS?: string;
 }
 
+// These endpoints all return live field state, so nothing should be served
+// stale from the edge. no-cache forces revalidation on every request.
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
   });
 }
 
 function html(body: string): Response {
   return new Response(body, {
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" },
   });
 }
 
@@ -45,7 +69,146 @@ function wantsHtml(req: Request): boolean {
 function endpointIndex() {
   const snapshotRoutes = knownSourceNames().map((s) => `/snapshots/${s}`);
   return {
-    endpoints: ["/healthz", "/field/current", ...snapshotRoutes, "/collations/latest", "/latents/latest", "/latents?name="],
+    endpoints: [
+      "/healthz",
+      "/field/current",
+      ...snapshotRoutes,
+      "/collations/latest",
+      "/latents/latest",
+      "/latents?name=",
+      "/crowdcast",
+      "/crowdcast.json",
+      "/crowdcast/history?place=",
+      "/nearby.json?lat=&lon=",
+    ],
+  };
+}
+
+/** Enrich the latest place_signals with static registry fields for the page. */
+async function buildCrowdcastResponse(env: Env) {
+  const rows = await latestPlaceSignals(env.DB);
+  // Must read the RUNTIME registry (measured when available), not the seed —
+  // otherwise every measured park renders as a bare slug with no HOLC grade.
+  const byId = new Map(loadKcParks().map((p) => [p.id, p]));
+  const parks = rows.map((r) => {
+    const place = byId.get(r.place_id);
+    return {
+      id: r.place_id,
+      name: place?.name ?? r.place_id,
+      holc_grade: place?.holc_grade,
+      canopy_index: place?.canopy_index,
+      neighborhood_canopy_index: place?.neighborhood_canopy_index,
+      water_feature: place?.water_feature,
+      rank: r.rank,
+      crowding: r.value,
+      tier: tierOf(r.value),
+      pull: r.pull,
+      friction: r.friction,
+      narrative: r.narrative,
+      foot_traffic: r.foot_traffic,
+      anomaly: r.anomaly,
+      confidence: r.confidence,
+    };
+  });
+  return {
+    generated_at: rows.length > 0 ? rows[0].ts : Date.now(),
+    location: "Kansas City area",
+    calibrated: rows.some((r) => r.foot_traffic !== undefined && r.foot_traffic !== null),
+    parks,
+  };
+}
+
+/**
+ * "Near me" — rank the registry against a caller's GPS position.
+ *
+ * Answers three questions the board can't: what's CLOSEST, what's LEAST CROWDED,
+ * and what's LIKELY COOLEST. Coolness is computed from measured canopy and the
+ * impervious-derived heat proxy, plus a water bonus, and is weather-independent;
+ * crowding comes from the latest persisted tick.
+ *
+ * Privacy: the caller's coordinates are used to sort an in-memory list and are
+ * never logged or persisted. No row is written on this path.
+ *
+ * Coverage: the bundled registry is Kansas City only. Out-of-area callers get an
+ * explicit `covered: false` and an empty list rather than a nonsense nearest
+ * park 400 miles away.
+ */
+const COVERAGE_RADIUS_MI = 45;
+
+function haversineMiles(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const R = 3958.8;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLon = toRad(bLon - aLon);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/** 0..100 relative thermal comfort. Higher = likely cooler underfoot. */
+function coolnessScore(p: { canopy_index: number; lst_summer_index: number; water_feature: boolean }): number {
+  const shade = p.canopy_index * 0.6;
+  const notHot = (100 - p.lst_summer_index) * 0.3;
+  const water = p.water_feature ? 12 : 0;
+  return Math.round(Math.min(100, Math.max(0, shade + notHot + water)));
+}
+
+async function buildNearbyResponse(env: Env, lat: number, lon: number, limit: number) {
+  const registry = loadKcParks();
+  const signals = await latestPlaceSignals(env.DB);
+  const crowdById = new Map(signals.map((s) => [s.place_id, s]));
+
+  const scored = registry
+    .map((p) => {
+      const s = crowdById.get(p.id);
+      const crowding = s?.value ?? null;
+      return {
+        id: p.id,
+        name: p.name,
+        distance_mi: Math.round(haversineMiles(lat, lon, p.lat, p.lon) * 10) / 10,
+        crowding,
+        tier: crowding === null ? null : tierOf(crowding),
+        coolness: coolnessScore(p),
+        canopy_index: p.canopy_index,
+        neighborhood_canopy_index: p.neighborhood_canopy_index,
+        water_feature: p.water_feature,
+        holc_grade: p.holc_grade,
+        narrative: s?.narrative,
+      };
+    })
+    .sort((a, b) => a.distance_mi - b.distance_mi);
+
+  const nearest = scored[0];
+  const covered = Boolean(nearest && nearest.distance_mi <= COVERAGE_RADIUS_MI);
+  if (!covered) {
+    return {
+      covered: false,
+      coverage: "Kansas City metro",
+      message: "No measured park registry for this location yet.",
+      nearest_covered_area_mi: nearest?.distance_mi ?? null,
+      parks: [],
+    };
+  }
+
+  const inRange = scored.filter((p) => p.distance_mi <= COVERAGE_RADIUS_MI).slice(0, limit);
+  const withCrowd = inRange.filter((p) => p.crowding !== null);
+  const pick = <T>(arr: T[], cmp: (a: T, b: T) => number) => (arr.length ? [...arr].sort(cmp)[0] : null);
+
+  return {
+    covered: true,
+    coverage: "Kansas City metro",
+    generated_at: signals.length ? signals[0].ts : Date.now(),
+    // Stated in the payload so the guarantee travels with the data, not just
+    // with the docs. Echoing the origin is a courtesy for client-side display;
+    // it is not retained server-side.
+    privacy: "Coordinates are used only to build this response. Not stored, not logged, not shared.",
+    origin: { lat, lon },
+    picks: {
+      closest: inRange[0] ?? null,
+      // Prefer somewhere genuinely nearby over an empty park across the metro.
+      least_crowded: pick(withCrowd, (a, b) => a.crowding! - b.crowding! || a.distance_mi - b.distance_mi),
+      coolest: pick(inRange, (a, b) => b.coolness - a.coolness || a.distance_mi - b.distance_mi),
+    },
+    parks: inRange,
   };
 }
 
@@ -85,6 +248,41 @@ export async function runTick(env: Env): Promise<void> {
 
   const reports = await Promise.all(registry.map((src) => runSource(env.DB, src, ctx, now)));
   for (const r of reports) console.log(r);
+
+  // Park Crowd-Cast — a per-place correlation over the static registry, keyed to
+  // the live field (temperature from METAR). Runs every tick, independent of
+  // collation, and persists one place_signals row per park.
+  try {
+    const metarSnap = await latestSnapshot(env.DB, "METAR");
+    const temperatureF = metarSnap ? hottestTempF(metarSnap.data) : undefined;
+    const cast = deriveParkCrowding(loadKcParks(), { now, temperatureF });
+    for (const p of cast.parks) {
+      await appendPlaceSignal(env.DB, {
+        ts: now,
+        place_id: p.id,
+        signal: "park_crowding",
+        value: p.crowding,
+        rank: p.rank,
+        demand: p.demandMult,
+        pull: p.pull,
+        friction: p.friction,
+        drivers: p.drivers,
+        narrative: p.narrative,
+        foot_traffic: p.foot_traffic,
+        anomaly: p.anomaly,
+        confidence: p.confidence,
+      });
+    }
+    console.log(`crowdcast: #1 ${cast.parks[0]?.name} ${cast.parks[0]?.crowding} @ ${cast.temperatureF}F`);
+
+    // Hourly rollup (+ optional prune). Self-throttles to once per hour.
+    const report = await maintainPlaceSignals(env.DB, now, Number(env.PLACE_SIGNALS_RETENTION_DAYS ?? 0));
+    if (report.ran) {
+      console.log(`maintenance: +${report.hourlyRows ?? 0} hourly rows, pruned ${report.pruned ?? 0}`);
+    }
+  } catch (err) {
+    console.log(`crowdcast: error ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   const maxAgeMs = Number(env.COLLATION_MAX_AGE_MS ?? 60 * 60 * 1000);
   const c = await collate(env.DB, maxAgeMs, now);
@@ -188,6 +386,30 @@ export default {
       if (!knownSourceNames().includes(source)) return json({ error: "unknown_source" }, 404);
       const snap = await latestSnapshot(env.DB, source);
       return snap ? json(snap) : json({ error: "no_snapshot" }, 404);
+    }
+
+    if (url.pathname === "/crowdcast") {
+      return html(renderCrowdcastHtml());
+    }
+
+    if (url.pathname === "/crowdcast.json") {
+      return json(await buildCrowdcastResponse(env));
+    }
+
+    if (url.pathname === "/crowdcast/history") {
+      const placeId = url.searchParams.get("place");
+      if (!placeId) return json({ error: "place_required" }, 400);
+      const limit = Math.min(Number(url.searchParams.get("limit") ?? 168), 720);
+      return json({ place_id: placeId, hours: await placeSignalHistory(env.DB, placeId, limit) });
+    }
+
+    if (url.pathname === "/nearby.json") {
+      const lat = Number(url.searchParams.get("lat"));
+      const lon = Number(url.searchParams.get("lon"));
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json({ error: "lat_lon_required" }, 400);
+      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return json({ error: "lat_lon_out_of_range" }, 400);
+      const limit = Math.min(Number(url.searchParams.get("limit") ?? 8), 25);
+      return json(await buildNearbyResponse(env, lat, lon, limit));
     }
 
     if (url.pathname === "/") {

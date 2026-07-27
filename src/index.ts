@@ -1,7 +1,9 @@
 import "dotenv/config";
-import { appendLatent, appendSnapshot, latestSnapshot, Snapshot } from "./store";
+import { appendLatent, appendPlaceSignal, appendSnapshot, latestSnapshot, Snapshot } from "./store";
 import { collate } from "./collate";
 import { deriveLatents } from "./latents";
+import { deriveParkCrowding, hottestTempF } from "./parks";
+import { loadKcParks } from "./places";
 import { startServer } from "./server";
 import { config } from "./config";
 import { registry } from "./sources/registry";
@@ -97,6 +99,32 @@ async function tick() {
   if (latents.length > 0) {
     console.log(`  LATENTS: ${latents.map((l) => `${l.name}=${l.value}`).join(", ")}`);
   }
+
+  // Park Crowd-Cast — a per-place correlation over the static registry, keyed to
+  // the live field (temperature from METAR). Persisted as place_signals, one row
+  // per park. Runs whenever the registry is loaded; independent of source count.
+  const metar = latestSnapshot("METAR");
+  const temperatureF = metar ? hottestTempF(metar.data) : undefined;
+  const cast = deriveParkCrowding(loadKcParks(), { now, temperatureF });
+  for (const p of cast.parks) {
+    appendPlaceSignal({
+      ts: now,
+      place_id: p.id,
+      signal: "park_crowding",
+      value: p.crowding,
+      rank: p.rank,
+      demand: p.demandMult,
+      pull: p.pull,
+      friction: p.friction,
+      drivers: p.drivers,
+      narrative: p.narrative,
+      foot_traffic: p.foot_traffic,
+      anomaly: p.anomaly,
+      confidence: p.confidence,
+    });
+  }
+  const top = cast.parks[0];
+  console.log(`  CROWD-CAST (${cast.temperatureF}°F): #1 ${top.name} ${top.crowding} (${top.tier})`);
 }
 
 async function main() {

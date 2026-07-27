@@ -164,3 +164,110 @@ Receives a batch of canonical NOTAM records from the SWIM relay (`relay/notam/`)
 **`401`** — `{ "error": "unauthorized" }` when the bearer token is missing or wrong.
 
 **`503`** — `{ "error": "ingest_disabled" }` when no `INGEST_TOKEN` is configured on the Worker.
+
+---
+
+## Location privacy
+
+Two endpoints accept caller coordinates: `GET /field/current` and `GET /nearby.json`.
+
+Coordinates are used **only** to build the single response they accompany — selecting which
+weather stations, air-quality monitors and parks to read, and computing distance. They are
+**NOT** written to any table, **NOT** logged, **NOT** associated with any identifier or
+session, and **NOT** shared with third parties. Neither path performs a database write.
+
+`GET /nearby.json` restates this in its own payload under `privacy`, so the guarantee
+travels with the data rather than living only in this document.
+
+---
+
+## `GET /crowdcast`
+
+The public Park Crowd-Cast board, as HTML. Reads `/crowdcast.json` client-side and refreshes
+on the cron cadence. Requires no location.
+
+---
+
+## `GET /crowdcast.json`
+
+Ranked park crowding for the most recent tick, enriched from the runtime place registry.
+
+```json
+{
+  "generated_at": 1785126903558,
+  "location": "Kansas City area",
+  "calibrated": false,
+  "parks": [
+    {
+      "id": "swope-park",
+      "name": "Swope Park",
+      "holc_grade": "D",
+      "canopy_index": 53,
+      "neighborhood_canopy_index": 22.1,
+      "water_feature": true,
+      "rank": 1,
+      "crowding": 79,
+      "tier": "packed",
+      "pull": 61.2,
+      "friction": 0,
+      "narrative": "...",
+      "confidence": 0.7
+    }
+  ]
+}
+```
+
+- `crowding` is **relative** predicted concentration (0–100), **NOT** a headcount.
+- `tier` ∈ `packed | busy | moderate | quiet`.
+- `calibrated` is `true` only when observed foot traffic was supplied; absent that, values
+  are predictions and `confidence` reflects registry provenance (0.7 measured, 0.55 seed).
+- `neighborhood_canopy_index` is the canopy of the surrounding HOLC polygon, **NOT** the
+  park interior. It is the field carrying the redlining signal; see
+  `docs/compendium/parks.md` for the measurement and the retraction it corrected.
+
+**`404`** is never returned; an empty `parks` array means no tick has been persisted yet.
+
+---
+
+## `GET /crowdcast/history?place={ID}&limit={N}`
+
+Hourly rollup for one place, newest first. `limit` defaults to 168 (one week), capped at 720.
+
+```json
+{
+  "place_id": "swope-park",
+  "hours": [
+    { "place_id": "swope-park", "hour_ts": 1785124800000, "avg_value": 41.2, "max_value": 44.0, "min_value": 38.6, "samples": 12 }
+  ]
+}
+```
+
+**`400`** — `{ "error": "place_required" }` if `place` is omitted.
+
+---
+
+## `GET /nearby.json?lat={LAT}&lon={LON}&limit={N}`
+
+Ranks the registry against a caller position. `limit` defaults to 8, capped at 25.
+
+```json
+{
+  "covered": true,
+  "coverage": "Kansas City metro",
+  "generated_at": 1785126903558,
+  "privacy": "Coordinates are used only to build this response. Not stored, not logged, not shared.",
+  "origin": { "lat": 39.0997, "lon": -94.5786 },
+  "picks": { "closest": {}, "least_crowded": {}, "coolest": {} },
+  "parks": []
+}
+```
+
+- `coolness` (0–100) is derived from measured canopy, the impervious-based heat proxy and a
+  water bonus. It is **weather-independent** — a relative property of the place, not a
+  forecast.
+- Outside the covered metro the response is `{ "covered": false, ... }` with an empty
+  `parks` array and `nearest_covered_area_mi`. The service **DOES NOT** guess beyond its
+  measured registry.
+
+**`400`** — `{ "error": "lat_lon_required" }` if either is missing or non-numeric;
+`{ "error": "lat_lon_out_of_range" }` if outside valid bounds.

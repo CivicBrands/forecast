@@ -70,6 +70,25 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_latents_ts ON latents(ts DESC);
   CREATE INDEX IF NOT EXISTS idx_latents_name_ts ON latents(name, ts DESC);
+
+  CREATE TABLE IF NOT EXISTS place_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts INTEGER NOT NULL,
+    place_id TEXT NOT NULL,
+    signal TEXT NOT NULL DEFAULT 'park_crowding',
+    value REAL NOT NULL,
+    rank INTEGER,
+    demand REAL,
+    pull REAL,
+    friction REAL,
+    drivers TEXT NOT NULL DEFAULT '{}',
+    narrative TEXT,
+    foot_traffic REAL,
+    anomaly REAL,
+    confidence REAL
+  );
+  CREATE INDEX IF NOT EXISTS idx_place_signals_ts ON place_signals(ts DESC);
+  CREATE INDEX IF NOT EXISTS idx_place_signals_place_ts ON place_signals(place_id, ts DESC);
 `);
 
 const insertSnapshotStmt = db.prepare(
@@ -178,4 +197,68 @@ export function latestLatents(): Latent[] {
 export function latentsByName(name: string, limit = 100): Latent[] {
   const rows = latentsByNameStmt.all(name, limit) as LatentRow[];
   return rows.map(rowToLatent);
+}
+
+export type PlaceSignal = {
+  ts: number;
+  place_id: string;
+  signal?: string;
+  value: number;
+  rank?: number;
+  demand?: number;
+  pull?: number;
+  friction?: number;
+  drivers?: Record<string, unknown>;
+  narrative?: string;
+  foot_traffic?: number;
+  anomaly?: number;
+  confidence?: number;
+};
+
+const insertPlaceSignalStmt = db.prepare(
+  `INSERT INTO place_signals (ts, place_id, signal, value, rank, demand, pull, friction, drivers, narrative, foot_traffic, anomaly, confidence)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+);
+
+export function appendPlaceSignal(s: PlaceSignal): number {
+  const info = insertPlaceSignalStmt.run(
+    s.ts,
+    s.place_id,
+    s.signal ?? "park_crowding",
+    s.value,
+    s.rank ?? null,
+    s.demand ?? null,
+    s.pull ?? null,
+    s.friction ?? null,
+    JSON.stringify(s.drivers ?? {}),
+    s.narrative ?? null,
+    s.foot_traffic ?? null,
+    s.anomaly ?? null,
+    s.confidence ?? null,
+  );
+  return Number(info.lastInsertRowid);
+}
+
+const latestPlaceSignalsStmt = db.prepare(
+  `SELECT ts, place_id, signal, value, rank, demand, pull, friction, drivers, narrative, foot_traffic, anomaly, confidence
+   FROM place_signals WHERE signal = ? AND ts = (SELECT MAX(ts) FROM place_signals WHERE signal = ?) ORDER BY rank ASC`,
+);
+
+export function latestPlaceSignals(signal = "park_crowding"): PlaceSignal[] {
+  const rows = latestPlaceSignalsStmt.all(signal, signal) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    ts: Number(r.ts),
+    place_id: String(r.place_id),
+    signal: String(r.signal),
+    value: Number(r.value),
+    rank: r.rank == null ? undefined : Number(r.rank),
+    demand: r.demand == null ? undefined : Number(r.demand),
+    pull: r.pull == null ? undefined : Number(r.pull),
+    friction: r.friction == null ? undefined : Number(r.friction),
+    drivers: JSON.parse(String(r.drivers ?? "{}")),
+    narrative: r.narrative == null ? undefined : String(r.narrative),
+    foot_traffic: r.foot_traffic == null ? undefined : Number(r.foot_traffic),
+    anomaly: r.anomaly == null ? undefined : Number(r.anomaly),
+    confidence: r.confidence == null ? undefined : Number(r.confidence),
+  }));
 }

@@ -20,10 +20,15 @@ src/
     hrrr_smoke.ts      HRRR Smoke proxy fetcher (env-gated)
     nexrad.ts          NEXRAD L2 metadata via S3 (env-gated)
     nldn.ts            NLDN lightning (env-gated, subscription)
+    events.ts          canonical local event context, initially PredictHQ (env-gated)
   notam-schema.ts      Canonical NOTAM Zod schema (shared by Worker + relay)
   store.ts             better-sqlite3 store (Node only)
   collate.ts           cross-source collation (Node)
   latents.ts           derived signals from a collation
+  places.ts            place registry: prefers measured places.generated.json, falls back to seed
+  places.generated.json  MEASURED registry (OSM geometry + NLCD canopy/impervious + HOLC grade)
+  parks.ts             Park Crowd-Cast deriver (per-place correlation + public voice)
+  crowdcast_page.ts    live /crowdcast HTML served by the Worker
   server.ts            Node HTTP server
   index.ts             Node entry: tick loop + setInterval + HTTP
   worker/
@@ -33,6 +38,12 @@ src/
 migrations/
   0001_init.sql        snapshots + collations tables
   0002_latents.sql     latents table
+  0003_places.sql      places (static registry) + place_signals (crowd-cast, foot_traffic seam)
+  0004_rollup.sql      place_signals_hourly rollup + maintenance_state
+scripts/
+  regenerate-places.mjs  OSM parks + NLCD canopy/impervious + HOLC grade (free, keyless)
+  holc-canopy-audit.mjs  NEIGHBORHOOD canopy per HOLC polygon — where the redlining signal lives
+  build-registry.mjs     merges the above into src/places.generated.json
 relay/
   notam/               out-of-process SWIM JMS consumer (systemd, home server)
 test/
@@ -69,7 +80,12 @@ npx wrangler d1 migrations apply forecast   # apply pending migrations
 | `HRRR_SMOKE_ENDPOINT` | both | optional; HTTP proxy returning JSON HRRR-Smoke samples |
 | `NEXRAD_STATIONS` | both | optional; comma-separated station IDs (e.g. `KEAX,KTWX`) |
 | `NLDN_TOKEN`, `NLDN_ENDPOINT` | both | optional; subscription-gated lightning |
+| `PREDICTHQ_API_KEY` | both | optional; enables EVENTS source |
+| `EVENTS_TIMEZONE` | both | default `America/Chicago` |
+| `EVENTS_LOOKAHEAD_HOURS` | both | default `24` |
+| `PREDICTHQ_CATEGORIES`, `PREDICTHQ_LIMIT` | both | optional event query tuning |
 | `INGEST_TOKEN` | Worker | bearer token required by `POST /ingest/notam`; must match the relay's `INGEST_TOKEN` |
+| `PLACE_SIGNALS_RETENTION_DAYS` | Worker | optional; days of raw `place_signals` to keep. **Unset/0 = never prune** (hourly rollup still runs, additive only). Set to a positive number to enable destructive pruning. |
 | `TICK_MS` | Node only | default 300_000 (Worker uses cron) |
 | `RUN_ONCE` | Node only | `1` = one tick, then exit |
 | `PORT` | Node only | default 3000 |

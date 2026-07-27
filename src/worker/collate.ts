@@ -1,17 +1,17 @@
 import { appendCollation, Collation, latestSnapshot } from "./store";
-import { registry } from "../sources/registry";
+import { knownSourceNames } from "../sources/registry";
 
 export async function collate(db: D1Database, maxAgeMs: number, now: number = Date.now()): Promise<Collation | null> {
   const sources: Collation["sources"] = {};
   let observedMin = Infinity;
   let observedMax = -Infinity;
 
-  for (const src of registry) {
-    const snap = await latestSnapshot(db, src.name);
+  for (const sourceName of knownSourceNames()) {
+    const snap = await latestSnapshot(db, sourceName);
     if (!snap || snap.id === undefined) continue;
     if (now - snap.fetched_at > maxAgeMs) continue;
 
-    sources[src.name] = {
+    sources[sourceName] = {
       snapshot_id: snap.id,
       fetched_at: snap.fetched_at,
       record_count: snap.data.length,
