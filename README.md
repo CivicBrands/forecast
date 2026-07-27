@@ -120,6 +120,17 @@ npx wrangler d1 migrations apply forecast
 npx wrangler deploy
 ```
 
+`npx wrangler deploy` is the production release gate for this repository. It
+does not deploy from the local machine. It requires a clean `prime` checkout,
+builds and tests the root application and NOTAM relay, creates a dry-run Worker
+bundle, pushes `prime`, and pushes an immutable `deploy/*` tag. That tag starts
+the GitHub Actions Worker deployment, which repeats the full validation before
+deploying the tagged commit.
+
+GitHub Actions requires repository secrets named `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`. Direct Wrangler commands such as `dev`, `tail`, and
+`deploy --dry-run` continue to pass through to the upstream Wrangler CLI.
+
 Relay commands:
 
 ```bash

@@ -1,1 +1,0 @@
-{"version":3,"file":"nldn.d.ts","sourceRoot":"","sources":["../../src/sources/nldn.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,CAAC,EAAE,MAAM,KAAK,CAAC;AACxB,OAAO,EAAE,MAAM,EAAiB,MAAM,SAAS,CAAC;AAEhD,QAAA,MAAM,qBAAqB;;;;;;;;;;;;;;;;;;EAMzB,CAAC;AAIH,MAAM,MAAM,eAAe,GAAG,CAAC,CAAC,KAAK,CAAC,OAAO,qBAAqB,CAAC,CAAC;AAEpE,eAAO,MAAM,UAAU,EAAE,MAAM,CAAC,eAAe,CA8B9C,CAAC"}

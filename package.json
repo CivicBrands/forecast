@@ -9,6 +9,10 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "node --test --require ts-node/register test/*.test.ts",
+    "verify:worker": "node node_modules/wrangler-direct/bin/wrangler.js deploy --dry-run --outdir=dist-worker",
+    "verify:relay": "npm --prefix relay/notam ci && npm --prefix relay/notam run build && npm --prefix relay/notam test",
+    "verify:full": "npm run build && npm test && npm run verify:relay && npm run verify:worker",
+    "postinstall": "node scripts/install-wrangler-gate.mjs",
     "clean": "rm -rf dist"
   },
   "keywords": [],
@@ -25,7 +29,8 @@
     "@types/node": "^22.10.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
-    "wrangler": "^4.98.0"
+    "wrangler": "file:tools/wrangler-github",
+    "wrangler-direct": "npm:wrangler@4.114.0"
   },
   "types": "./dist/index.d.ts",
   "allowScripts": {
