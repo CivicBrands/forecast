@@ -1,0 +1,1 @@
+This folder contains the built output assets for the worker "forecast" generated at 2026-06-06T16:35:39.813Z.
